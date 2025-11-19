@@ -1,0 +1,28 @@
+{
+    "00_Notes": [
+        "Idea.md",
+        "Script.md",
+        "Metadata.md",
+        "Tasks.md"
+    ],
+    "01_Footage": [
+        "A-Roll",
+        "B-Roll",
+        "Screen",
+        "Audio",
+        "Misc"
+    ],
+    "02_Assets": [
+        "Graphics",
+        "Thumbnails",
+        "Music",
+        "SFX"
+    ],
+    "03_Resolve": [
+        "Timelines",
+        "Cache",
+        "Subtitles"
+    ],
+    "04_Previews": [],
+    "99_Archive": []
+}

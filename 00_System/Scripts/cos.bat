@@ -1,0 +1,1 @@
+@python "C:\CreativeOS\00_System\Scripts\manage.py" %*
