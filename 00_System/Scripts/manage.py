@@ -207,7 +207,56 @@ def cmd_sync(args):
                 synced_count += 1
                 print(f"  -> Synced: {project_name}")
 
-    print(f"✨ Brain Sync Complete. {synced_count} projects updated in Vault.")
+def cmd_thumbs(args):
+    """Mirrors all project thumbnails to a global gallery."""
+    print("🖼️  Spinning up Thumbnail Mirror...")
+
+    # 1. Define Global Gallery Path
+    gallery_root = os.path.join(ROOT_PATH, "04_Global_Assets", "Thumbnails_Mirror")
+    if not os.path.exists(gallery_root):
+        os.makedirs(gallery_root)
+
+    count = 0
+
+    # 2. Walk through all projects
+    for root, dirs, files in os.walk(PROJECTS_PATH):
+        # We look for the 02_Assets/Thumbnails folder in every project
+        if "02_Assets" in dirs:
+            thumb_source = os.path.join(root, "02_Assets", "Thumbnails")
+            if os.path.exists(thumb_source):
+                # Found a thumbnail folder!
+
+                # Get Project Name from metadata if possible, else folder name
+                project_name = os.path.basename(root)
+                if ".project_meta.json" in files:
+                    try:
+                        with open(os.path.join(root, ".project_meta.json"), "r", encoding="utf-8-sig") as f:
+                            meta = json.load(f)
+                            project_name = meta.get("slug", project_name)
+                    except:
+                        pass
+
+                # Copy images
+                for img in os.listdir(thumb_source):
+                    if img.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                        src_file = os.path.join(thumb_source, img)
+
+                        # Create a unique name so they don't overwrite each other
+                        # Format: YYYY-MM-DD_ProjectName_OriginalFile.png
+                        creation_time = os.path.getmtime(src_file)
+                        date_str = datetime.datetime.fromtimestamp(creation_time).strftime("%Y-%m-%d")
+
+                        new_filename = f"{date_str}_{project_name}_{img}"
+                        dst_file = os.path.join(gallery_root, new_filename)
+
+                        # Only copy if it doesn't exist (Speed optimization)
+                        if not os.path.exists(dst_file):
+                            shutil.copy2(src_file, dst_file)
+                            count += 1
+                            print(f"  -> Mirrored: {new_filename}")
+
+    print(f"✨ Gallery Updated. {count} new thumbnails mirrored to:\n   {gallery_root}")
+    os.startfile(gallery_root)
 
 # --- MAIN ---
 
@@ -229,6 +278,9 @@ def main():
     # SYNC Command
     p_sync = subparsers.add_parser("sync", help="Sync notes to Obsidian")
 
+    # THUMBS Command
+    p_thumb = subparsers.add_parser("thumbs", help="Mirror all thumbnails to global gallery")
+
     args = parser.parse_args()
 
     if args.command == "new":
@@ -237,6 +289,8 @@ def main():
         cmd_export(args)
     elif args.command == "sync":
         cmd_sync(args)
+    elif args.command == "thumbs":
+        cmd_thumbs(args)
     else:
         parser.print_help()
 
