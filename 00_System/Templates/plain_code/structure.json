@@ -1,0 +1,6 @@
+{
+    "00_Notes": ["DevLog.md"],
+    "src": [],
+    "docs": ["project_requirements.md", "code_guidelines.md", "prompt.md"],
+    "docs/mockup": []
+}

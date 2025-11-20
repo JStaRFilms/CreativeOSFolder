@@ -1,54 +1,54 @@
 # Ignore everything by default
-*
+# *
 
 # But keep directories so we can find files inside them
-!*/
+# !*/
 
 # Un-ignore code and configuration files
-!*.py
-!*.js
-!*.jsx
-!*.ts
-!*.tsx
-!*.html
-!*.css
-!*.scss
-!*.less
-!*.json
-!*.md
-!*.txt
-!*.sh
-!*.bat
-!*.ps1
-!*.cpp
-!*.c
-!*.h
-!*.hpp
-!*.java
-!*.go
-!*.rb
-!*.php
-!*.sql
-!*.yaml
-!*.yml
-!*.toml
-!*.xml
-!*.ini
-!*.conf
-!*.cfg
-!*.env
-!*.gitignore
-!*.dockerignore
-!Dockerfile
-!Makefile
-!package.json
-!package-lock.json
-!requirements.txt
-!Gemfile
-!Gemfile.lock
-!composer.json
-!composer.lock
-!tsconfig.json
+# !*.py
+# !*.js
+# !*.jsx
+# !*.ts
+# !*.tsx
+# !*.html
+# !*.css
+# !*.scss
+# !*.less
+# !*.json
+# !*.md
+# !*.txt
+# !*.sh
+# !*.bat
+# !*.ps1
+# !*.cpp
+# !*.c
+# !*.h
+# !*.hpp
+# !*.java
+# !*.go
+# !*.rb
+# !*.php
+# !*.sql
+# !*.yaml
+# !*.yml
+# !*.toml
+# !*.xml
+# !*.ini
+# !*.conf
+# !*.cfg
+# !*.env
+# !*.gitignore
+# !*.dockerignore
+# !Dockerfile
+# !Makefile
+# !package.json
+# !package-lock.json
+# !requirements.txt
+# !Gemfile
+# !Gemfile.lock
+# !composer.json
+# !composer.lock
+# !tsconfig.json
 
 # Ignore specific folders
 01_Projects/

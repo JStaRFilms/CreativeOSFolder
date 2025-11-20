@@ -1,0 +1,8 @@
+{
+    "00_Notes": ["Lyrics.md", "MixNotes.md", "Ideas.md"],
+    "01_Project_Files": ["FL_Studio", "Ableton", "Reaper"],
+    "02_Stems": ["Vocals", "Drums", "Inst"],
+    "03_Exports": ["MP3", "WAV", "Master"],
+    "04_Samples": [],
+    "05_Ref_Tracks": []
+}
