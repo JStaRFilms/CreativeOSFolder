@@ -49,3 +49,9 @@
 !composer.json
 !composer.lock
 !tsconfig.json
+
+# Ignore specific folders
+01_Projects/
+02_Exports/
+03_Vault/
+04_Global_Assets/
