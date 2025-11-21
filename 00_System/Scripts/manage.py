@@ -63,14 +63,11 @@ def cmd_new(args):
     project_name = args.name
     category = args.category.title()
     
-    # 1. Date Logic
     date_prefix = get_date_slug(args.date)
     safe_name = project_name.replace(" ", "_")
     slug = f"{date_prefix}_{safe_name}"
     
-    # 2. Location Intelligence
     cwd = os.getcwd()
-    
     if args.client:
         target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
         if not os.path.exists(target_root):
@@ -79,17 +76,14 @@ def cmd_new(args):
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        # Map 'Web' to 'Code' folder physically
         phys_cat = "Code" if category.lower() in ["web", "code"] else category
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
 
     target_dir = os.path.join(target_root, slug)
-    
     if os.path.exists(target_dir):
         print(f"⚠️  Project already exists: {target_dir}")
         return
 
-    # 3. Template Logic
     cat_lower = category.lower()
     if cat_lower == "code":
         template_name = "plain_code"
@@ -109,7 +103,6 @@ def cmd_new(args):
     with open(template_file, "r") as f:
         structure = json.load(f)
 
-    # 4. Build
     print(f"🔨 Creating project: {slug}")
     print(f"   Template: {template_name}")
     os.makedirs(target_dir)
@@ -126,14 +119,12 @@ def cmd_new(args):
             else:
                 os.makedirs(os.path.join(folder_path, item), exist_ok=True)
 
-    # 5. Notes
     notes_dir = os.path.join(target_dir, "00_Notes")
     os.makedirs(notes_dir, exist_ok=True)
     if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
         with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
             f.write(f"# {project_name}\nDate: {date_prefix}\n")
 
-    # 6. Metadata
     meta_client = "None"
     if args.client:
         meta_client = args.client
@@ -145,8 +136,7 @@ def cmd_new(args):
                 idx = parts.index("Clients")
                 if len(parts) > idx + 1:
                     meta_client = parts[idx + 1]
-            except:
-                pass
+            except: pass
 
     meta = {
         "name": project_name,
@@ -248,7 +238,6 @@ def cmd_thumbs(args):
 def cmd_clean(args):
     """Organizes the Downloads folder."""
     print(f"🧹 Cleaning Downloads at: {DOWNLOADS_PATH}...")
-    
     if not os.path.exists(DOWNLOADS_PATH):
         print(f"❌ Error: Downloads path not found: {DOWNLOADS_PATH}")
         return
@@ -265,10 +254,8 @@ def cmd_clean(args):
     count = 0
     for item in os.listdir(DOWNLOADS_PATH):
         item_path = os.path.join(DOWNLOADS_PATH, item)
-        
         if os.path.isfile(item_path) and not item.startswith("."):
             ext = os.path.splitext(item)[1].lower()
-            
             target_folder = None
             for folder, extensions in MAPPING.items():
                 if ext in extensions:
@@ -277,9 +264,7 @@ def cmd_clean(args):
             
             if target_folder:
                 dest_dir = os.path.join(DOWNLOADS_PATH, target_folder)
-                if not os.path.exists(dest_dir):
-                    os.makedirs(dest_dir)
-                
+                if not os.path.exists(dest_dir): os.makedirs(dest_dir)
                 try:
                     shutil.move(item_path, os.path.join(dest_dir, item))
                     count += 1
@@ -290,57 +275,113 @@ def cmd_clean(args):
     print(f"✨ Cleanup Complete. Moved {count} files.")
     os.startfile(DOWNLOADS_PATH)
 
+def cmd_sort_exports(args):
+    """Sorts files/folders from _Inbox into the Timeline."""
+    inbox_path = os.path.join(EXPORTS_PATH, "_Inbox")
+    
+    # Ensure _Inbox exists
+    if not os.path.exists(inbox_path):
+        os.makedirs(inbox_path)
+        print(f"✨ Created Inbox at: {inbox_path}")
+        print("ℹ️  Drop loose files here and run this command again to file them.")
+        os.startfile(inbox_path)
+        return
+
+    print(f"🗂️  Sorting Inbox: {inbox_path}...")
+    
+    # Check if empty
+    if not os.listdir(inbox_path):
+        print("✅ Inbox is empty. Nothing to sort.")
+        return
+
+    count = 0
+    for item in os.listdir(inbox_path):
+        src_path = os.path.join(inbox_path, item)
+        
+        # Get modification time
+        mtime = os.path.getmtime(src_path)
+        date_obj = datetime.datetime.fromtimestamp(mtime)
+        
+        year = date_obj.strftime("%Y")
+        month_folder = date_obj.strftime("%m - %B")
+        
+        # Destination: 02_Exports/YYYY/MM - Month
+        dest_dir = os.path.join(EXPORTS_PATH, year, month_folder)
+        
+        # If it's a folder (Project), append the folder name
+        if os.path.isdir(src_path):
+            dest_path = os.path.join(dest_dir, item)
+        else:
+            # It's a file, drop into month root
+            dest_path = os.path.join(dest_dir, item)
+
+        # Create dest directory
+        parent_dir = os.path.dirname(dest_path)
+        if not os.path.exists(parent_dir):
+            os.makedirs(parent_dir)
+
+        # Handle Collision (v2, v3...)
+        base, ext = os.path.splitext(dest_path)
+        counter = 2
+        while os.path.exists(dest_path):
+            dest_path = f"{base}_v{counter}{ext}"
+            counter += 1
+
+        # Move
+        try:
+            shutil.move(src_path, dest_path)
+            count += 1
+            print(f"  -> Filed: {item} into {year}/{month_folder}")
+        except Exception as e:
+            print(f"  ❌ Error moving {item}: {e}")
+
+    print(f"✨ Sorted {count} items into the Timeline.")
+
 # --- MAIN ---
 
 def main():
     description_text = """
-    🚀 CreativeOS Commander (COS) v1.0
+    🚀 CreativeOS Commander (COS)
     ----------------------------------
-    EXAMPLES:
-      cos new "Nike Ad"                     (Default Video Project)
-      cos new "Portfolio" -c code           (Simple Code)
-      cos new "Saas App" -c web             (Full Stack)
-      cos new "Project" --client SternUP    (Client Project)
-      
-      cos sync                              (Push notes to Obsidian)
+    MAINTENANCE:
       cos clean                             (Sort Downloads Folder)
+      cos sort-exports                      (File _Inbox items into Timeline)
+      
+    WORKFLOW:
+      cos new "Nike Ad"                     (Default Video Project)
+      cos new "Project" --client SternUP    (Client Project)
       cos export                            (Open Monthly Export)
+      cos sync                              (Push notes to Obsidian)
       cos thumbs                            (Update Gallery)
     """
     
     parser = argparse.ArgumentParser(description=description_text, formatter_class=RawTextHelpFormatter)
     subparsers = parser.add_subparsers(dest="command")
 
-    # NEW
+    # COMMANDS
     p_new = subparsers.add_parser("new", help="Spawn a new project")
-    p_new.add_argument("name", type=str, help="Project Name")
-    p_new.add_argument("-c", "--category", type=str, default="Video", help="Template type")
-    p_new.add_argument("-d", "--date", type=str, help="Force date")
-    p_new.add_argument("--client", type=str, help="Client Name")
+    p_new.add_argument("name", type=str)
+    p_new.add_argument("-c", "--category", type=str, default="Video")
+    p_new.add_argument("-d", "--date", type=str)
+    p_new.add_argument("--client", type=str)
 
-    # EXPORT
     p_exp = subparsers.add_parser("export", help="Open export folder")
-    p_exp.add_argument("-s", "--simple", action="store_true", help="Force simple view")
+    p_exp.add_argument("-s", "--simple", action="store_true")
 
-    # UTILS
-    p_sync = subparsers.add_parser("sync", help="Sync Notes -> Obsidian")
-    p_thumbs = subparsers.add_parser("thumbs", help="Update Thumbnail Gallery")
-    p_clean = subparsers.add_parser("clean", help="Organize Downloads folder")
+    subparsers.add_parser("sync", help="Sync Notes")
+    subparsers.add_parser("thumbs", help="Update Gallery")
+    subparsers.add_parser("clean", help="Clean Downloads")
+    subparsers.add_parser("sort-exports", help="Sort Export Inbox")
 
     args = parser.parse_args()
 
-    if args.command == "new":
-        cmd_new(args)
-    elif args.command == "export":
-        cmd_export(args)
-    elif args.command == "sync":
-        cmd_sync(args)
-    elif args.command == "thumbs":
-        cmd_thumbs(args)
-    elif args.command == "clean":
-        cmd_clean(args)
-    else:
-        parser.print_help()
+    if args.command == "new": cmd_new(args)
+    elif args.command == "export": cmd_export(args)
+    elif args.command == "sync": cmd_sync(args)
+    elif args.command == "thumbs": cmd_thumbs(args)
+    elif args.command == "clean": cmd_clean(args)
+    elif args.command == "sort-exports": cmd_sort_exports(args)
+    else: parser.print_help()
 
 if __name__ == "__main__":
     main()
