@@ -22,6 +22,7 @@ PROJECTS_PATH = CONFIG["projects_path"]
 EXPORTS_PATH = CONFIG["exports_path"]
 TEMPLATES_PATH = CONFIG["templates_path"]
 VAULT_PATH = CONFIG["vault_path"]
+DOWNLOADS_PATH = CONFIG.get("downloads_path", os.path.join(os.path.expanduser("~"), "Downloads"))
 
 # --- HELPERS ---
 
@@ -78,8 +79,7 @@ def cmd_new(args):
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        # Default Category folder (e.g. 01_Projects/Video)
-        # Map 'Web' to 'Code' folder physically, even if logic is different
+        # Map 'Web' to 'Code' folder physically
         phys_cat = "Code" if category.lower() in ["web", "code"] else category
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
 
@@ -89,57 +89,51 @@ def cmd_new(args):
         print(f"⚠️  Project already exists: {target_dir}")
         return
 
-    # 3. Template Logic (The Selector)
+    # 3. Template Logic
     cat_lower = category.lower()
-    
     if cat_lower == "code":
-        template_name = "plain_code"     # The new simple one
+        template_name = "plain_code"
     elif cat_lower == "web":
-        template_name = "code_project"   # The complex one (rename folder if needed)
+        template_name = "code_project"
     elif cat_lower in ["music", "audio"]:
         template_name = "audio_project"
     else:
-        template_name = "video_project"  # Default
+        template_name = "video_project"
     
     template_file = os.path.join(TEMPLATES_PATH, template_name, "structure.json")
     
     if not os.path.exists(template_file):
-        print(f"❌ Template not found: {template_name}\n   Checked: {template_file}")
+        print(f"❌ Template not found: {template_name}")
         return
         
     with open(template_file, "r") as f:
         structure = json.load(f)
 
-    # 4. Build Structure
+    # 4. Build
     print(f"🔨 Creating project: {slug}")
     print(f"   Template: {template_name}")
     os.makedirs(target_dir)
     
     for folder, contents in structure.items():
-        # Create the folder path (handles nested like docs/mockup)
         folder_path = os.path.join(target_dir, folder)
         os.makedirs(folder_path, exist_ok=True)
-        
-        # Create files inside that folder
         for item in contents:
-            # If it has an extension, treat as file
             if "." in item:
                 file_path = os.path.join(folder_path, item)
                 if not os.path.exists(file_path):
                     with open(file_path, "w") as f:
                         f.write(f"# {item}\nProject: {project_name}\nCreated: {date_prefix}\n")
             else:
-                # It's a subfolder defined in the list
                 os.makedirs(os.path.join(folder_path, item), exist_ok=True)
 
-    # 5. Standard Notes (Always ensure 00_Notes exists)
+    # 5. Notes
     notes_dir = os.path.join(target_dir, "00_Notes")
     os.makedirs(notes_dir, exist_ok=True)
     if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
         with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
             f.write(f"# {project_name}\nDate: {date_prefix}\n")
 
-    # 6. Determine Client Name
+    # 6. Metadata
     meta_client = "None"
     if args.client:
         meta_client = args.client
@@ -154,7 +148,6 @@ def cmd_new(args):
             except:
                 pass
 
-    # 7. Write Metadata
     meta = {
         "name": project_name,
         "slug": slug,
@@ -187,19 +180,17 @@ def cmd_export(args):
 def cmd_sync(args):
     print("🧠 Syncing CreativeOS Brain...")
     vault_projects_dir = os.path.join(VAULT_PATH, "01_Active_Projects")
-    
     if not os.path.exists(vault_projects_dir):
         os.makedirs(vault_projects_dir)
 
     synced_count = 0
-    
     for root, dirs, files in os.walk(PROJECTS_PATH):
         if ".project_meta.json" in files:
             meta_path = os.path.join(root, ".project_meta.json")
             try:
                 with open(meta_path, "r", encoding="utf-8-sig") as f:
                     meta = json.load(f)
-            except (json.JSONDecodeError, OSError) as e:
+            except (json.JSONDecodeError, OSError):
                 print(f"⚠️  SKIPPING CORRUPT: {meta_path}")
                 continue
             
@@ -210,15 +201,11 @@ def cmd_sync(args):
             if os.path.exists(notes_source):
                 if not os.path.exists(notes_dest):
                     os.makedirs(notes_dest)
-                
                 for file in os.listdir(notes_source):
                     if file.endswith(".md"):
-                        src_file = os.path.join(notes_source, file)
-                        dst_file = os.path.join(notes_dest, file)
                         try:
-                            shutil.copy2(src_file, dst_file)
-                        except Exception:
-                            pass
+                            shutil.copy2(os.path.join(notes_source, file), os.path.join(notes_dest, file))
+                        except Exception: pass
                 synced_count += 1
                 print(f"  -> Synced: {project_name}")
 
@@ -241,8 +228,7 @@ def cmd_thumbs(args):
                         with open(os.path.join(root, ".project_meta.json"), "r", encoding="utf-8-sig") as f:
                             meta = json.load(f)
                             project_name = meta.get("slug", project_name)
-                    except:
-                        pass
+                    except: pass
 
                 for img in os.listdir(thumb_source):
                     if img.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
@@ -259,48 +245,87 @@ def cmd_thumbs(args):
     print(f"✨ Gallery Updated. {count} new thumbnails.")
     os.startfile(gallery_root)
 
+def cmd_clean(args):
+    """Organizes the Downloads folder."""
+    print(f"🧹 Cleaning Downloads at: {DOWNLOADS_PATH}...")
+    
+    if not os.path.exists(DOWNLOADS_PATH):
+        print(f"❌ Error: Downloads path not found: {DOWNLOADS_PATH}")
+        return
+
+    MAPPING = {
+        "_Images": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"],
+        "_Video": [".mp4", ".mov", ".avi", ".mkv"],
+        "_Audio": [".mp3", ".wav", ".aac"],
+        "_Docs": [".pdf", ".docx", ".txt", ".xlsx", ".pptx"],
+        "_Installers": [".exe", ".msi"],
+        "_Archives": [".zip", ".rar", ".7z", ".tar", ".gz"]
+    }
+
+    count = 0
+    for item in os.listdir(DOWNLOADS_PATH):
+        item_path = os.path.join(DOWNLOADS_PATH, item)
+        
+        if os.path.isfile(item_path) and not item.startswith("."):
+            ext = os.path.splitext(item)[1].lower()
+            
+            target_folder = None
+            for folder, extensions in MAPPING.items():
+                if ext in extensions:
+                    target_folder = folder
+                    break
+            
+            if target_folder:
+                dest_dir = os.path.join(DOWNLOADS_PATH, target_folder)
+                if not os.path.exists(dest_dir):
+                    os.makedirs(dest_dir)
+                
+                try:
+                    shutil.move(item_path, os.path.join(dest_dir, item))
+                    count += 1
+                    print(f"  -> Moved {item} to {target_folder}")
+                except Exception as e:
+                    print(f"  ⚠️ Could not move {item}: {e}")
+
+    print(f"✨ Cleanup Complete. Moved {count} files.")
+    os.startfile(DOWNLOADS_PATH)
+
 # --- MAIN ---
 
 def main():
     description_text = """
-    🚀 CreativeOS Commander (COS)
-    -----------------------------
-    Your CLI for managing the creative lifecycle.
-
+    🚀 CreativeOS Commander (COS) v1.0
+    ----------------------------------
     EXAMPLES:
       cos new "Nike Ad"                     (Default Video Project)
-      cos new "Portfolio" -c code           (Simple Code: docs/src)
-      cos new "Saas App" -c web             (Complex: backend/frontend)
-      cos new "Beat 1" -c music             (DAW Template)
+      cos new "Portfolio" -c code           (Simple Code)
+      cos new "Saas App" -c web             (Full Stack)
       cos new "Project" --client SternUP    (Client Project)
+      
       cos sync                              (Push notes to Obsidian)
-      cos export                            (Open Monthly Export Folder)
+      cos clean                             (Sort Downloads Folder)
+      cos export                            (Open Monthly Export)
+      cos thumbs                            (Update Gallery)
     """
     
-    parser = argparse.ArgumentParser(
-        description=description_text, 
-        formatter_class=RawTextHelpFormatter
-    )
-    
+    parser = argparse.ArgumentParser(description=description_text, formatter_class=RawTextHelpFormatter)
     subparsers = parser.add_subparsers(dest="command")
 
     # NEW
-    p_new = subparsers.add_parser("new", help="Spawn a new project structure")
+    p_new = subparsers.add_parser("new", help="Spawn a new project")
     p_new.add_argument("name", type=str, help="Project Name")
-    p_new.add_argument("-c", "--category", type=str, default="Video", 
-                      help="Template type: Video (default), Code, Web, Music")
-    p_new.add_argument("-d", "--date", type=str, help="Force date (YYYY-MM-DD)")
-    p_new.add_argument("--client", type=str, help="Specify Client Name")
+    p_new.add_argument("-c", "--category", type=str, default="Video", help="Template type")
+    p_new.add_argument("-d", "--date", type=str, help="Force date")
+    p_new.add_argument("--client", type=str, help="Client Name")
 
     # EXPORT
-    p_exp = subparsers.add_parser("export", help="Open the organized Export folder")
-    p_exp.add_argument("-s", "--simple", action="store_true", help="Force simple view (no subfolders)")
+    p_exp = subparsers.add_parser("export", help="Open export folder")
+    p_exp.add_argument("-s", "--simple", action="store_true", help="Force simple view")
 
-    # SYNC
-    p_sync = subparsers.add_parser("sync", help="Sync Project Notes -> Obsidian Vault")
-
-    # THUMBS
-    p_thumbs = subparsers.add_parser("thumbs", help="Mirror all thumbnails to Global Gallery")
+    # UTILS
+    p_sync = subparsers.add_parser("sync", help="Sync Notes -> Obsidian")
+    p_thumbs = subparsers.add_parser("thumbs", help="Update Thumbnail Gallery")
+    p_clean = subparsers.add_parser("clean", help="Organize Downloads folder")
 
     args = parser.parse_args()
 
@@ -312,6 +337,8 @@ def main():
         cmd_sync(args)
     elif args.command == "thumbs":
         cmd_thumbs(args)
+    elif args.command == "clean":
+        cmd_clean(args)
     else:
         parser.print_help()
 

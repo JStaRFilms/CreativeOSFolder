@@ -4,5 +4,6 @@
     "exports_path": "C:\\CreativeOS\\02_Exports",
     "templates_path": "C:\\CreativeOS\\00_System\\Templates",
     "vault_path": "C:\\CreativeOS\\03_Vault",
-    "version": "1.0"
+    "downloads_path": "E:\\Downloads",
+    "version": "1.1"
 }
