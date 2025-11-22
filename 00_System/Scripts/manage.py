@@ -76,7 +76,14 @@ def cmd_new(args):
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        phys_cat = "Code" if category.lower() in ["web", "code"] else category
+        # Map 'Web' to 'Code' folder physically
+        if category.lower() in ["web", "code"]:
+            phys_cat = "Code"
+        elif category.lower() == "simple":
+            phys_cat = "Clients" # Assume simple projects are usually client work
+        else:
+            phys_cat = category
+            
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
 
     target_dir = os.path.join(target_root, slug)
@@ -84,8 +91,11 @@ def cmd_new(args):
         print(f"⚠️  Project already exists: {target_dir}")
         return
 
+    # TEMPLATE SELECTOR
     cat_lower = category.lower()
-    if cat_lower == "code":
+    if cat_lower == "simple":
+        template_name = "simple"
+    elif cat_lower == "code":
         template_name = "plain_code"
     elif cat_lower == "web":
         template_name = "code_project"
@@ -119,6 +129,7 @@ def cmd_new(args):
             else:
                 os.makedirs(os.path.join(folder_path, item), exist_ok=True)
 
+    # Ensure Notes exist for sync
     notes_dir = os.path.join(target_dir, "00_Notes")
     os.makedirs(notes_dir, exist_ok=True)
     if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
@@ -181,7 +192,6 @@ def cmd_sync(args):
                 with open(meta_path, "r", encoding="utf-8-sig") as f:
                     meta = json.load(f)
             except (json.JSONDecodeError, OSError):
-                print(f"⚠️  SKIPPING CORRUPT: {meta_path}")
                 continue
             
             project_name = meta.get("slug", "Unknown_Project")
@@ -236,7 +246,6 @@ def cmd_thumbs(args):
     os.startfile(gallery_root)
 
 def cmd_clean(args):
-    """Organizes the Downloads folder."""
     print(f"🧹 Cleaning Downloads at: {DOWNLOADS_PATH}...")
     if not os.path.exists(DOWNLOADS_PATH):
         print(f"❌ Error: Downloads path not found: {DOWNLOADS_PATH}")
@@ -276,98 +285,80 @@ def cmd_clean(args):
     os.startfile(DOWNLOADS_PATH)
 
 def cmd_sort_exports(args):
-    """Sorts files/folders from _Inbox into the Timeline."""
     inbox_path = os.path.join(EXPORTS_PATH, "_Inbox")
-    
-    # Ensure _Inbox exists
     if not os.path.exists(inbox_path):
         os.makedirs(inbox_path)
         print(f"✨ Created Inbox at: {inbox_path}")
-        print("ℹ️  Drop loose files here and run this command again to file them.")
         os.startfile(inbox_path)
         return
 
     print(f"🗂️  Sorting Inbox: {inbox_path}...")
-    
-    # Check if empty
     if not os.listdir(inbox_path):
-        print("✅ Inbox is empty. Nothing to sort.")
+        print("✅ Inbox is empty.")
         return
 
     count = 0
     for item in os.listdir(inbox_path):
         src_path = os.path.join(inbox_path, item)
-        
-        # Get modification time
         mtime = os.path.getmtime(src_path)
         date_obj = datetime.datetime.fromtimestamp(mtime)
         
         year = date_obj.strftime("%Y")
         month_folder = date_obj.strftime("%m - %B")
-        
-        # Destination: 02_Exports/YYYY/MM - Month
         dest_dir = os.path.join(EXPORTS_PATH, year, month_folder)
         
-        # If it's a folder (Project), append the folder name
-        if os.path.isdir(src_path):
-            dest_path = os.path.join(dest_dir, item)
-        else:
-            # It's a file, drop into month root
-            dest_path = os.path.join(dest_dir, item)
+        if os.path.isdir(src_path): dest_path = os.path.join(dest_dir, item)
+        else: dest_path = os.path.join(dest_dir, item)
 
-        # Create dest directory
         parent_dir = os.path.dirname(dest_path)
-        if not os.path.exists(parent_dir):
-            os.makedirs(parent_dir)
+        if not os.path.exists(parent_dir): os.makedirs(parent_dir)
 
-        # Handle Collision (v2, v3...)
         base, ext = os.path.splitext(dest_path)
         counter = 2
         while os.path.exists(dest_path):
             dest_path = f"{base}_v{counter}{ext}"
             counter += 1
 
-        # Move
         try:
             shutil.move(src_path, dest_path)
             count += 1
-            print(f"  -> Filed: {item} into {year}/{month_folder}")
+            print(f"  -> Filed: {item}")
         except Exception as e:
-            print(f"  ❌ Error moving {item}: {e}")
+            print(f"  ❌ Error: {e}")
 
-    print(f"✨ Sorted {count} items into the Timeline.")
+    print(f"✨ Sorted {count} items.")
 
 # --- MAIN ---
 
 def main():
     description_text = """
-    🚀 CreativeOS Commander (COS)
+    🚀 CreativeOS Commander (COS) v1.1
     ----------------------------------
-    MAINTENANCE:
-      cos clean                             (Sort Downloads Folder)
-      cos sort-exports                      (File _Inbox items into Timeline)
-      
-    WORKFLOW:
-      cos new "Nike Ad"                     (Default Video Project)
+    EXAMPLES:
+      cos new "Nike Ad"                     (Video Project)
+      cos new "Quick Fix" -c simple         (Minimal: Notes only)
+      cos new "Portfolio" -c code           (Simple Code)
+      cos new "Saas App" -c web             (Full Stack)
       cos new "Project" --client SternUP    (Client Project)
-      cos export                            (Open Monthly Export)
+      
       cos sync                              (Push notes to Obsidian)
-      cos thumbs                            (Update Gallery)
+      cos clean                             (Sort Downloads Folder)
+      cos sort-exports                      (File _Inbox items)
     """
     
     parser = argparse.ArgumentParser(description=description_text, formatter_class=RawTextHelpFormatter)
     subparsers = parser.add_subparsers(dest="command")
 
-    # COMMANDS
+    # NEW
     p_new = subparsers.add_parser("new", help="Spawn a new project")
     p_new.add_argument("name", type=str)
-    p_new.add_argument("-c", "--category", type=str, default="Video")
+    p_new.add_argument("-c", "--category", type=str, default="Video", help="Template: Video, Simple, Code, Web, Music")
     p_new.add_argument("-d", "--date", type=str)
     p_new.add_argument("--client", type=str)
 
+    # UTILS
     p_exp = subparsers.add_parser("export", help="Open export folder")
     p_exp.add_argument("-s", "--simple", action="store_true")
-
     subparsers.add_parser("sync", help="Sync Notes")
     subparsers.add_parser("thumbs", help="Update Gallery")
     subparsers.add_parser("clean", help="Clean Downloads")
