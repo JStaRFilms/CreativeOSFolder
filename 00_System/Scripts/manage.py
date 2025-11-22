@@ -68,6 +68,8 @@ def cmd_new(args):
     slug = f"{date_prefix}_{safe_name}"
     
     cwd = os.getcwd()
+    
+    # 1. Determine Physical Location (WHERE it goes)
     if args.client:
         target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
         if not os.path.exists(target_root):
@@ -76,13 +78,15 @@ def cmd_new(args):
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        # Map 'Web' to 'Code' folder physically
+        # Map categories to physical folders
         if category.lower() in ["web", "code"]:
             phys_cat = "Code"
-        elif category.lower() == "simple":
-            phys_cat = "Clients" # Assume simple projects are usually client work
+        elif category.lower() in ["music", "audio"]:
+            phys_cat = "Music"
+        elif category.lower() == "ai":
+            phys_cat = "AI"
         else:
-            phys_cat = category
+            phys_cat = "Video" # Default physical folder
             
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
 
@@ -91,9 +95,11 @@ def cmd_new(args):
         print(f"⚠️  Project already exists: {target_dir}")
         return
 
-    # TEMPLATE SELECTOR
+    # 2. Determine Template (HOW it looks)
     cat_lower = category.lower()
-    if cat_lower == "simple":
+    
+    if args.simple:
+        # Override any category template with the Simple one
         template_name = "simple"
     elif cat_lower == "code":
         template_name = "plain_code"
@@ -113,8 +119,9 @@ def cmd_new(args):
     with open(template_file, "r") as f:
         structure = json.load(f)
 
+    # 3. Build Structure
     print(f"🔨 Creating project: {slug}")
-    print(f"   Template: {template_name}")
+    print(f"   Category: {category} | Template: {template_name}")
     os.makedirs(target_dir)
     
     for folder, contents in structure.items():
@@ -129,13 +136,14 @@ def cmd_new(args):
             else:
                 os.makedirs(os.path.join(folder_path, item), exist_ok=True)
 
-    # Ensure Notes exist for sync
+    # Ensure Notes exist
     notes_dir = os.path.join(target_dir, "00_Notes")
     os.makedirs(notes_dir, exist_ok=True)
     if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
         with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
             f.write(f"# {project_name}\nDate: {date_prefix}\n")
 
+    # 4. Metadata Logic
     meta_client = "None"
     if args.client:
         meta_client = args.client
@@ -332,13 +340,13 @@ def cmd_sort_exports(args):
 
 def main():
     description_text = """
-    🚀 CreativeOS Commander (COS) v1.1
+    🚀 CreativeOS Commander (COS) v1.2
     ----------------------------------
     EXAMPLES:
       cos new "Nike Ad"                     (Video Project)
-      cos new "Quick Fix" -c simple         (Minimal: Notes only)
-      cos new "Portfolio" -c code           (Simple Code)
-      cos new "Saas App" -c web             (Full Stack)
+      cos new "Quick Test" -c code --simple (Minimal Code Project)
+      cos new "SaaS App" -c web             (Full Code Project)
+      cos new "Beat" -c music --simple      (Minimal Music Project)
       cos new "Project" --client SternUP    (Client Project)
       
       cos sync                              (Push notes to Obsidian)
@@ -352,13 +360,15 @@ def main():
     # NEW
     p_new = subparsers.add_parser("new", help="Spawn a new project")
     p_new.add_argument("name", type=str)
-    p_new.add_argument("-c", "--category", type=str, default="Video", help="Template: Video, Simple, Code, Web, Music")
+    p_new.add_argument("-c", "--category", type=str, default="Video", help="Category: Video, Code, Music, AI")
+    p_new.add_argument("-s", "--simple", action="store_true", help="Use minimal template (Notes + Meta only)")
     p_new.add_argument("-d", "--date", type=str)
     p_new.add_argument("--client", type=str)
 
     # UTILS
     p_exp = subparsers.add_parser("export", help="Open export folder")
     p_exp.add_argument("-s", "--simple", action="store_true")
+    
     subparsers.add_parser("sync", help="Sync Notes")
     subparsers.add_parser("thumbs", help="Update Gallery")
     subparsers.add_parser("clean", help="Clean Downloads")
