@@ -4,6 +4,7 @@ import argparse
 import datetime
 import sys
 import shutil
+import statistics
 from argparse import RawTextHelpFormatter
 
 # --- CONFIG LOAD ---
@@ -57,6 +58,37 @@ def find_meta_in_cwd():
             break
     return None, None
 
+def get_smart_date(path):
+    """
+    Calculates the 'True Date' of a file or folder.
+    For folders, it finds the MEDIAN date of all files inside to ignore outliers.
+    """
+    # 1. If it's a file, just return its modified time
+    if os.path.isfile(path):
+        return os.path.getmtime(path)
+
+    # 2. If it's a folder, scan contents
+    timestamps = []
+    for root, _, files in os.walk(path):
+        for file in files:
+            # Skip hidden system files (Mac/Windows junk)
+            if file.startswith('.') or file.lower() == 'thumbs.db':
+                continue
+            
+            file_path = os.path.join(root, file)
+            try:
+                timestamps.append(os.path.getmtime(file_path))
+            except OSError:
+                pass
+
+    # 3. Analyze Logic
+    if not timestamps:
+        # Folder is empty or only has errors, fallback to folder date
+        return os.path.getmtime(path)
+    
+    # Return the MEDIAN (Middle value) to ignore outliers (1999 assets or Today's cache)
+    return statistics.median(timestamps)
+
 # --- COMMANDS ---
 
 def cmd_new(args):
@@ -68,8 +100,6 @@ def cmd_new(args):
     slug = f"{date_prefix}_{safe_name}"
     
     cwd = os.getcwd()
-    
-    # 1. Determine Physical Location (WHERE it goes)
     if args.client:
         target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
         if not os.path.exists(target_root):
@@ -78,7 +108,6 @@ def cmd_new(args):
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        # Map categories to physical folders
         if category.lower() in ["web", "code"]:
             phys_cat = "Code"
         elif category.lower() in ["music", "audio"]:
@@ -86,7 +115,7 @@ def cmd_new(args):
         elif category.lower() == "ai":
             phys_cat = "AI"
         else:
-            phys_cat = "Video" # Default physical folder
+            phys_cat = "Video"
             
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
 
@@ -95,11 +124,9 @@ def cmd_new(args):
         print(f"⚠️  Project already exists: {target_dir}")
         return
 
-    # 2. Determine Template (HOW it looks)
+    # Template Logic
     cat_lower = category.lower()
-    
     if args.simple:
-        # Override any category template with the Simple one
         template_name = "simple"
     elif cat_lower == "code":
         template_name = "plain_code"
@@ -119,7 +146,6 @@ def cmd_new(args):
     with open(template_file, "r") as f:
         structure = json.load(f)
 
-    # 3. Build Structure
     print(f"🔨 Creating project: {slug}")
     print(f"   Category: {category} | Template: {template_name}")
     os.makedirs(target_dir)
@@ -136,14 +162,12 @@ def cmd_new(args):
             else:
                 os.makedirs(os.path.join(folder_path, item), exist_ok=True)
 
-    # Ensure Notes exist
     notes_dir = os.path.join(target_dir, "00_Notes")
     os.makedirs(notes_dir, exist_ok=True)
     if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
         with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
             f.write(f"# {project_name}\nDate: {date_prefix}\n")
 
-    # 4. Metadata Logic
     meta_client = "None"
     if args.client:
         meta_client = args.client
@@ -308,8 +332,10 @@ def cmd_sort_exports(args):
     count = 0
     for item in os.listdir(inbox_path):
         src_path = os.path.join(inbox_path, item)
-        mtime = os.path.getmtime(src_path)
-        date_obj = datetime.datetime.fromtimestamp(mtime)
+        
+        # USE SMART DATE LOGIC (Median of content)
+        smart_timestamp = get_smart_date(src_path)
+        date_obj = datetime.datetime.fromtimestamp(smart_timestamp)
         
         year = date_obj.strftime("%Y")
         month_folder = date_obj.strftime("%m - %B")
@@ -330,7 +356,7 @@ def cmd_sort_exports(args):
         try:
             shutil.move(src_path, dest_path)
             count += 1
-            print(f"  -> Filed: {item}")
+            print(f"  -> Filed: {item} into {year}/{month_folder}")
         except Exception as e:
             print(f"  ❌ Error: {e}")
 
@@ -340,18 +366,16 @@ def cmd_sort_exports(args):
 
 def main():
     description_text = """
-    🚀 CreativeOS Commander (COS) v1.2
+    🚀 CreativeOS Commander (COS) v1.3
     ----------------------------------
     EXAMPLES:
       cos new "Nike Ad"                     (Video Project)
       cos new "Quick Test" -c code --simple (Minimal Code Project)
-      cos new "SaaS App" -c web             (Full Code Project)
-      cos new "Beat" -c music --simple      (Minimal Music Project)
       cos new "Project" --client SternUP    (Client Project)
       
       cos sync                              (Push notes to Obsidian)
       cos clean                             (Sort Downloads Folder)
-      cos sort-exports                      (File _Inbox items)
+      cos sort-exports                      (File _Inbox items into Timeline)
     """
     
     parser = argparse.ArgumentParser(description=description_text, formatter_class=RawTextHelpFormatter)
