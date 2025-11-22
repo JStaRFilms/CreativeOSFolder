@@ -84,6 +84,7 @@ def cmd_new(args):
     slug = f"{date_prefix}_{safe_name}"
     
     cwd = os.getcwd()
+    # Location Logic
     if args.client:
         target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
         if not os.path.exists(target_root):
@@ -137,6 +138,7 @@ def cmd_new(args):
         with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
             f.write(f"# {project_name}\nDate: {date_prefix}\n")
 
+    # Metadata Client Logic
     meta_client = "None"
     if args.client: meta_client = args.client
     else:
@@ -144,6 +146,12 @@ def cmd_new(args):
         parts = norm_path.split("/")
         if "Clients" in parts:
             try: meta_client = parts[parts.index("Clients") + 1]
+            except: pass
+        # Auto-detect subfolder context (e.g. Video/J_Star_Films)
+        elif "Video" in parts:
+            try: 
+                vid_idx = parts.index("Video")
+                if len(parts) > vid_idx + 1: meta_client = parts[vid_idx + 1]
             except: pass
 
     meta = {
@@ -164,7 +172,6 @@ def cmd_init(args):
     """Adopts the current folder into CreativeOS"""
     cwd = os.getcwd()
     
-    # Safety Check
     if not cwd.startswith(PROJECTS_PATH):
         print("⚠️  Safety Warning: You are not inside C:\\CreativeOS\\01_Projects.")
         confirm = input("Are you sure you want to initialize this folder? (y/n): ")
@@ -176,25 +183,34 @@ def cmd_init(args):
 
     print(f"🪄 Initializing: {os.path.basename(cwd)}...")
 
-    # 1. Smart Date Calculation
+    # 1. Smart Date Calculation (Median)
     print("   Analyzing dates...")
     smart_ts = get_smart_date(cwd)
     date_str = datetime.datetime.fromtimestamp(smart_ts).strftime("%Y-%m-%d")
     
-    # 2. Detect Metadata
+    # 2. Context Detection (The "JSTAR" Logic)
     current_name = os.path.basename(cwd)
-    
-    # Determine Client/Category from path
-    meta_client = "None"
-    category = "Video" # Default
-    
     norm_path = cwd.replace("\\", "/")
     parts = norm_path.split("/")
     
+    meta_client = "None"
+    category = "Video" # Default
+    
+    # Detect Client from "Clients" folder
     if "Clients" in parts:
         try: meta_client = parts[parts.index("Clients") + 1]
         except: pass
     
+    # Detect Sub-Context from "Video" folder (e.g. J_Star_Films)
+    elif "Video" in parts:
+        try:
+            vid_idx = parts.index("Video")
+            # If there is a folder between Video and Current Project
+            if len(parts) > vid_idx + 2: 
+                meta_client = parts[vid_idx + 1]
+        except: pass
+
+    # Detect Category
     if "Code" in parts: category = "Code"
     elif "Music" in parts: category = "Music"
     elif "AI" in parts: category = "AI"
@@ -206,9 +222,9 @@ def cmd_init(args):
         with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
             f.write(f"# {current_name}\nInitialized: {date_str}\n(Legacy Import)\n")
 
-    # 4. Rename Folder (if requested, but usually safer to keep unless user wants strictness)
-    # Let's construct the slug but NOT rename automatically to avoid open-file errors.
-    # We will just store the slug in metadata.
+    # 4. Define Slug (Date + Name) - BUT DO NOT RENAME FOLDER
+    # We keep the folder name as-is to avoid Windows "Access Denied" crash.
+    # But we update the slug so exports are sorted correctly.
     slug = f"{date_str}_{current_name.replace(' ', '_')}"
 
     meta = {
@@ -224,7 +240,9 @@ def cmd_init(args):
     with open(os.path.join(cwd, ".project_meta.json"), "w") as f:
         json.dump(meta, f, indent=4)
 
-    print(f"✅ Project adopted successfully!\n   Date detected: {date_str}")
+    print(f"✅ Project adopted successfully!")
+    print(f"   Slug set to: {slug}")
+    print(f"   Context: {meta_client}")
 
 def cmd_export(args):
     month_path = get_export_month_path()
@@ -373,7 +391,7 @@ def cmd_sort_exports(args):
 
 def main():
     description_text = """
-    🚀 CreativeOS Commander (COS) v1.4
+    🚀 CreativeOS Commander (COS) v1.5
     ----------------------------------
     CREATION:
       cos new "Project Name" [flags]        Create new project
