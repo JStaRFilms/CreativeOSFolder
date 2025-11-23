@@ -124,7 +124,7 @@ def cmd_new(args):
     date_prefix = get_date_slug(args.date)
     safe_name = project_name.replace(" ", "_")
     slug = f"{date_prefix}_{safe_name}"
-    
+
     cwd = os.getcwd()
     if args.client:
         target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
@@ -153,16 +153,30 @@ def cmd_new(args):
     elif cat_lower in ["music", "audio"]: template_name = "audio_project"
     elif cat_lower == "ai": template_name = "ai_project"  # <--- ADDED THIS LINE
     else: template_name = "video_project"
-    
+
     template_file = os.path.join(TEMPLATES_PATH, template_name, "structure.json")
     if not os.path.exists(template_file):
         print(f"❌ Template not found: {template_name}")
         return
-        
+
     with open(template_file, "r") as f: structure = json.load(f)
 
     print(f"🔨 Creating project: {slug}")
     os.makedirs(target_dir)
+
+    meta_client = "None"
+    if args.client: meta_client = args.client
+    else:
+        norm_path = target_root.replace("\\", "/")
+        parts = norm_path.split("/")
+        if "Clients" in parts:
+            try: meta_client = parts[parts.index("Clients") + 1]
+            except: pass
+        elif "Video" in parts:
+             try:
+                 if len(parts) > parts.index("Video") + 1: meta_client = parts[parts.index("Video") + 1]
+             except: pass
+
     for folder, contents in structure.items():
         folder_path = os.path.join(target_dir, folder)
         os.makedirs(folder_path, exist_ok=True)
@@ -175,22 +189,18 @@ def cmd_new(args):
 
     notes_dir = os.path.join(target_dir, "00_Notes")
     os.makedirs(notes_dir, exist_ok=True)
-    if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
-        with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
-            f.write(f"# {project_name}\nDate: {date_prefix}\n")
+    with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
+        f.write(f"""---
+type: project
+category: {category}
+client: {meta_client}
+status: active
+created: {date_prefix}
+tags: [creativeos]
+---
 
-    meta_client = "None"
-    if args.client: meta_client = args.client
-    else:
-        norm_path = target_root.replace("\\", "/")
-        parts = norm_path.split("/")
-        if "Clients" in parts:
-            try: meta_client = parts[parts.index("Clients") + 1]
-            except: pass
-        elif "Video" in parts:
-             try: 
-                 if len(parts) > parts.index("Video") + 1: meta_client = parts[parts.index("Video") + 1]
-             except: pass
+# {project_name}
+""")
 
     meta = {
         "name": project_name, "slug": slug, "type": category,
@@ -237,7 +247,17 @@ def cmd_init(args):
     os.makedirs(notes_dir, exist_ok=True)
     if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
         with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
-            f.write(f"# {current_name}\nInitialized: {date_str}\n")
+            f.write(f"""---
+type: project
+category: {category}
+client: {meta_client}
+status: active
+created: {date_str}
+tags: [creativeos]
+---
+
+# {current_name}
+""")
 
     slug = f"{date_str}_{current_name.replace(' ', '_')}"
     meta = {
@@ -320,33 +340,59 @@ def cmd_thumbs(args):
     os.startfile(gallery_root)
 
 def cmd_clean(args):
-    print(f"🧹 Cleaning Downloads: {DOWNLOADS_PATH}")
-    if not os.path.exists(DOWNLOADS_PATH): return
+    # Determine which folder to clean
+    target_path = args.target if args.target else DOWNLOADS_PATH
+
+    print(f"🧹 Cleaning: {target_path}...")
+    if not os.path.exists(target_path):
+        print(f"❌ Error: Path not found: {target_path}")
+        return
+
     MAPPING = {
-        "_Images": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"],
-        "_Video": [".mp4", ".mov", ".avi", ".mkv"],
-        "_Audio": [".mp3", ".wav", ".aac"],
-        "_Docs": [".pdf", ".docx", ".txt", ".xlsx", ".pptx"],
-        "_Installers": [".exe", ".msi"],
-        "_Archives": [".zip", ".rar", ".7z", ".tar", ".gz"]
+        "_Images": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".tiff", ".bmp"],
+        "_Video": [".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv"],
+        "_Audio": [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"],
+        "_Docs": [".pdf", ".docx", ".txt", ".xlsx", ".pptx", ".csv", ".md"],
+        "_Installers": [".exe", ".msi", ".iso", ".dmg"],
+        "_Archives": [".zip", ".rar", ".7z", ".tar", ".gz"],
+        "_Fonts": [".ttf", ".otf", ".woff", ".woff2"],
+        "_3D": [".blend", ".fbx", ".obj", ".stl", ".gltf"]
     }
+
     count = 0
-    for item in os.listdir(DOWNLOADS_PATH):
-        item_path = os.path.join(DOWNLOADS_PATH, item)
-        if os.path.isfile(item_path) and not item.startswith("."):
+    for item in os.listdir(target_path):
+        if item.startswith("."):
+            continue  # Skip dot files/folders
+
+        item_path = os.path.join(target_path, item)
+
+        # Only process files - leave folders untouched
+        if os.path.isfile(item_path):
             ext = os.path.splitext(item)[1].lower()
+            target_folder = None
+
             for folder, extensions in MAPPING.items():
                 if ext in extensions:
-                    dest_dir = os.path.join(DOWNLOADS_PATH, folder)
-                    if not os.path.exists(dest_dir): os.makedirs(dest_dir)
-                    try:
-                        shutil.move(item_path, os.path.join(dest_dir, item))
-                        count += 1
-                        print(f"  -> Moved {item} to {folder}")
-                    except: pass
+                    target_folder = folder
                     break
+
+            if not target_folder:
+                target_folder = "_Other"  # For files with unknown extensions
+
+            if target_folder:
+                dest_dir = os.path.join(target_path, target_folder)
+                if not os.path.exists(dest_dir): os.makedirs(dest_dir)
+
+                try:
+                    shutil.move(item_path, os.path.join(dest_dir, item))
+                    count += 1
+                    print(f"  -> Moved {item} to {target_folder}")
+                except Exception as e:
+                    print(f"  ⚠️ Could not move {item}: {e}")
+
     print(f"✨ Cleanup Complete. {count} files moved.")
-    os.startfile(DOWNLOADS_PATH)
+
+    os.startfile(target_path)
 
 def cmd_sort_exports(args):
     inbox_path = os.path.join(EXPORTS_PATH, "_Inbox")
@@ -383,41 +429,119 @@ def cmd_sort_exports(args):
         except Exception as e: print(f"  ❌ Error: {e}")
     print(f"✨ Sorted {count} items.")
 
+# --- MAIN ---
+
 def main():
-    description_text = """
-    🚀 CreativeOS Commander (COS) v1.6
-    ----------------------------------
-    CREATION:
-      cos new "Project Name" [flags]        Create new project
-         Flags: -c (code/web/music/ai), --simple, --client "Name", -d "YYYY-MM-DD"
-      cos init                              Adopt CURRENT folder as a project
-    
-    MAINTENANCE:
-      cos sync                              Sync Notes -> Obsidian
-      cos sort-exports                      File _Inbox items -> Timeline
-      cos clean                             Organize Downloads
-      cos thumbs                            Update Gallery
+    banner = r"""
+   ______                _   _            ___  ____
+  / ____/________  ____ | | | |__   ___  / _ \/ ___|
+ | |   | '__/ _ \/ _` || |_| |\ \ / / _ \| | | \___ \
+ | |___| | |  __/ (_| ||  _  | \ V /  __/ |_| |___) |
+  \____|_|  \___|\__,_||_| |_|  \_/ \___|\___/|____/
     """
     
-    parser = argparse.ArgumentParser(description=description_text, formatter_class=RawTextHelpFormatter)
-    subparsers = parser.add_subparsers(dest="command")
+    help_text = f"""{banner}
+    The Central Nervous System for your Creative Workflow.
+    ====================================================
 
-    p_new = subparsers.add_parser("new", help="Spawn a new project")
-    p_new.add_argument("name", type=str)
-    p_new.add_argument("-c", "--category", type=str, default="Video")
-    p_new.add_argument("-s", "--simple", action="store_true")
-    p_new.add_argument("-d", "--date", type=str)
-    p_new.add_argument("--client", type=str)
+    1. CREATION COMMANDS
+    --------------------
+    cos new "Name" [flags]
+        Creates a new project. Context-aware: detects where you are.
+        
+        Flags:
+          -c, --category  : Template (Video, Code, Web, Music, AI). Default: Video.
+          -s, --simple    : "Wrapper Mode". Creates ONLY Metadata + Notes. No subfolders.
+          -d, --date      : "Time Travel". Force specific date (YYYY-MM-DD).
+          --client        : Force project into specific Client folder.
 
-    subparsers.add_parser("init", help="Adopt current folder")
+        Examples:
+          cos new "Nike Ad"                     -> 01_Projects/Video/Date_Nike_Ad
+          cos new "React App" -c web            -> 01_Projects/Code/Date_React_App
+          cos new "Beat 1" -c music --simple    -> 01_Projects/Music/Date_Beat_1 (Empty shell)
+          cos new "Campaign" --client SternUP   -> 01_Projects/Clients/SternUP/Date_Campaign
 
-    p_exp = subparsers.add_parser("export", help="Open export folder")
-    p_exp.add_argument("-s", "--simple", action="store_true")
+    cos init
+        "Blesses" an existing folder. Run this INSIDE a folder you just dragged in.
+        - Calculates "Smart Date" (median file date).
+        - Generates .project_meta.json.
+        - Creates Note file.
+        - Does NOT rename the folder (Safety first).
+
+    2. WORKFLOW COMMANDS
+    --------------------
+    cos export [flags]
+        Opens the correct export destination.
+        - Inside a Project: Opens `02_Exports/Year/Month/ProjectName`.
+        - Outside a Project: Opens `02_Exports/Year/Month` (Generic bucket).
+        
+        Flags:
+          -s, --simple    : Force open the Generic Month bucket, even if inside a project.
+
+    cos sync
+        Bidirectional Brain Bridge. Syncs `00_Notes` <-> Obsidian Vault.
+        - Strategy: Last Write Wins.
+        - Safety: Creates .bak files on conflict.
+        - Injects Dataview YAML metadata automatically.
+
+    3. MAINTENANCE COMMANDS
+    -----------------------
+    cos clean [flags]
+        The Janitor. Sorts loose files into _Images, _Video, _Installers, etc.
+        
+        Flags:
+          -t, --target    : Specify folder to clean. (Default: E:\\Downloads)
+        
+        Examples:
+          cos clean                     (Cleans Downloads)
+          cos clean -t "C:\\Desktop"    (Cleans Desktop)
+
+    cos sort-exports
+        The Portal. Moves files from `02_Exports/_Inbox` into the Timeline.
+        - Reads file creation date.
+        - Moves to `02_Exports/YYYY/MM - Month`.
+
+    cos thumbs
+        The Gallery. Scans all projects for `02_Assets/Thumbnails`.
+        - Copies them to `04_Global_Assets/Thumbnails_Mirror`.
+        - Renames with Date + Project Name.
+    """
     
-    subparsers.add_parser("sync", help="Sync Notes")
-    subparsers.add_parser("thumbs", help="Update Gallery")
-    subparsers.add_parser("clean", help="Clean Downloads")
-    subparsers.add_parser("sort-exports", help="Sort Export Inbox")
+    parser = argparse.ArgumentParser(
+        description=help_text, 
+        formatter_class=RawTextHelpFormatter,
+        usage="cos <command> [options]"
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", title="Commands")
+    
+    # --- NEW ---
+    p_new = subparsers.add_parser("new", help="🚀 Spawn a new project")
+    p_new.add_argument("name", type=str, help="Project Name")
+    p_new.add_argument("-c", "--category", type=str, default="Video", help="Category: Video, Code, Web, Music, AI")
+    p_new.add_argument("-s", "--simple", action="store_true", help="Use minimal template (Notes + Meta only)")
+    p_new.add_argument("-d", "--date", type=str, help="Override date (YYYY-MM-DD)")
+    p_new.add_argument("--client", type=str, help="Group under specific Client")
+
+    # --- INIT ---
+    subparsers.add_parser("init", help="🪄  Adopt current folder into OS")
+
+    # --- EXPORT ---
+    p_exp = subparsers.add_parser("export", help="📂 Open export location")
+    p_exp.add_argument("-s", "--simple", action="store_true", help="Force month bucket")
+
+    # --- SYNC ---
+    subparsers.add_parser("sync", help="🧠 Sync Notes <-> Obsidian")
+
+    # --- THUMBS ---
+    subparsers.add_parser("thumbs", help="🖼️  Update Thumbnail Gallery")
+
+    # --- CLEAN ---
+    p_clean = subparsers.add_parser("clean", help="🧹 Sort Downloads or Target")
+    p_clean.add_argument("-t", "--target", type=str, help="Specific folder to clean")
+
+    # --- SORT EXPORTS ---
+    subparsers.add_parser("sort-exports", help="🗂️  File _Inbox -> Timeline")
 
     args = parser.parse_args()
 
