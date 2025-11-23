@@ -1,0 +1,25 @@
+{
+    "00_Notes": [
+        "Experiment_Log.md",
+        "Model_Card.md",
+        "References.md"
+    ],
+    "01_Data": [
+        "raw",
+        "processed",
+        "interim"
+    ],
+    "02_Models": [
+        "checkpoints",
+        "final"
+    ],
+    "03_Notebooks": [],
+    "04_Src": [
+        "scripts",
+        "utils"
+    ],
+    "05_Outputs": [
+        "figures",
+        "logs"
+    ]
+}

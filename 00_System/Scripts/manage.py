@@ -145,11 +145,13 @@ def cmd_new(args):
         print(f"⚠️  Project already exists: {target_dir}")
         return
 
+    # Template Logic (THE FIX IS HERE)
     cat_lower = category.lower()
     if args.simple: template_name = "simple"
     elif cat_lower == "code": template_name = "plain_code"
     elif cat_lower == "web": template_name = "code_project"
     elif cat_lower in ["music", "audio"]: template_name = "audio_project"
+    elif cat_lower == "ai": template_name = "ai_project"  # <--- ADDED THIS LINE
     else: template_name = "video_project"
     
     template_file = os.path.join(TEMPLATES_PATH, template_name, "structure.json")
@@ -350,10 +352,10 @@ def cmd_sort_exports(args):
     inbox_path = os.path.join(EXPORTS_PATH, "_Inbox")
     if not os.path.exists(inbox_path):
         os.makedirs(inbox_path)
-        print(f"✨ Created Inbox.")
+        print(f"✨ Created Inbox at: {inbox_path}")
         os.startfile(inbox_path)
         return
-    print(f"🗂️  Sorting Inbox...")
+    print(f"🗂️  Sorting Inbox: {inbox_path}...")
     if not os.listdir(inbox_path):
         print("✅ Inbox is empty.")
         return
@@ -365,113 +367,60 @@ def cmd_sort_exports(args):
         year = date_obj.strftime("%Y")
         month_folder = date_obj.strftime("%m - %B")
         dest_dir = os.path.join(EXPORTS_PATH, year, month_folder)
-        
-        dest_path = os.path.join(dest_dir, item)
-        parent = os.path.dirname(dest_path)
-        if not os.path.exists(parent): os.makedirs(parent)
-        
-        # Handle collisions
+        if os.path.isdir(src_path): dest_path = os.path.join(dest_dir, item)
+        else: dest_path = os.path.join(dest_dir, item)
+        parent_dir = os.path.dirname(dest_path)
+        if not os.path.exists(parent_dir): os.makedirs(parent_dir)
         base, ext = os.path.splitext(dest_path)
-        ctr = 2
+        counter = 2
         while os.path.exists(dest_path):
-            dest_path = f"{base}_v{ctr}{ext}"
-            ctr += 1
-            
+            dest_path = f"{base}_v{counter}{ext}"
+            counter += 1
         try:
             shutil.move(src_path, dest_path)
             count += 1
-            print(f"  -> Filed: {item} -> {year}/{month_folder}")
-        except: pass
+            print(f"  -> Filed: {item} into {year}/{month_folder}")
+        except Exception as e: print(f"  ❌ Error: {e}")
     print(f"✨ Sorted {count} items.")
 
 def main():
-    banner = r"""
-   ______                _   _            ___  ____ 
-  / ____/________  ____ | | | |__   ___  / _ \/ ___|
- | |   | '__/ _ \/ _` || |_| |\ \ / / _ \| | | \___ \
- | |___| | |  __/ (_| ||  _  | \ V /  __/ |_| |___) |
-  \____|_|  \___|\__,_||_| |_|  \_/ \___|\___/|____/ 
-    """
-    description_text = f"""{banner}
-    The Central Nervous System for your Creative Workflow.
-    ====================================================
+    description_text = """
+    🚀 CreativeOS Commander (COS) v1.6
+    ----------------------------------
+    CREATION:
+      cos new "Project Name" [flags]        Create new project
+         Flags: -c (code/web/music/ai), --simple, --client "Name", -d "YYYY-MM-DD"
+      cos init                              Adopt CURRENT folder as a project
     
-    CreativeOS automates the friction in your creative process. 
-    It handles project scaffolding, keeps your notes in sync with your 
-    Obsidian "Second Brain", and keeps your assets organized.
-
-    CORE WORKFLOWS:
-    ---------------
-    1. 🚀 SPAWN:   Create standardized projects with `cos new`.
-    2. 🧠 SYNC:    Keep project notes and Obsidian in perfect harmony with `cos sync`.
-    3. 📤 EXPORT:  Jump straight to your export folders with `cos export`.
-    4. 🧹 CLEAN:   Keep your system tidy with `cos clean` and `cos sort-exports`.
-    
-    Use 'cos <command> --help' for specific options.
+    MAINTENANCE:
+      cos sync                              Sync Notes -> Obsidian
+      cos sort-exports                      File _Inbox items -> Timeline
+      cos clean                             Organize Downloads
+      cos thumbs                            Update Gallery
     """
     
-    parser = argparse.ArgumentParser(
-        description=description_text, 
-        formatter_class=RawTextHelpFormatter
-    )
-    subparsers = parser.add_subparsers(dest="command", help="Available Commands")
+    parser = argparse.ArgumentParser(description=description_text, formatter_class=RawTextHelpFormatter)
+    subparsers = parser.add_subparsers(dest="command")
+
+    p_new = subparsers.add_parser("new", help="Spawn a new project")
+    p_new.add_argument("name", type=str)
+    p_new.add_argument("-c", "--category", type=str, default="Video")
+    p_new.add_argument("-s", "--simple", action="store_true")
+    p_new.add_argument("-d", "--date", type=str)
+    p_new.add_argument("--client", type=str)
+
+    subparsers.add_parser("init", help="Adopt current folder")
+
+    p_exp = subparsers.add_parser("export", help="Open export folder")
+    p_exp.add_argument("-s", "--simple", action="store_true")
     
-    # --- NEW ---
-    p_new = subparsers.add_parser(
-        "new", 
-        help="🚀 Create a new project with standardized folder structure",
-        description="Generates a new project folder with the correct template (Video, Code, Music, etc.),\ncreates a metadata file, and initializes a blank Note."
-    )
-    p_new.add_argument("name", type=str, help="The name of the project (e.g., 'Summer Vlog')")
-    p_new.add_argument("-c", "--category", type=str, default="Video", help="Project category: Video (default), Code, Music, AI, Web")
-    p_new.add_argument("-s", "--simple", action="store_true", help="Use a minimal folder structure (no subfolders)")
-    p_new.add_argument("-d", "--date", type=str, help="Override creation date (YYYY-MM-DD)")
-    p_new.add_argument("--client", type=str, help="Group this project under a specific Client")
-
-    # --- INIT ---
-    subparsers.add_parser(
-        "init", 
-        help="🪄  Adopt the current folder into CreativeOS",
-        description="Scans the current directory, calculates the 'smart date' based on file contents,\nand generates the required .project_meta.json file to make it compatible with CreativeOS tools."
-    )
-    
-    # --- EXPORT ---
-    p_exp = subparsers.add_parser(
-        "export", 
-        help="📂 Open the standardized export location",
-        description="Opens the export folder for the current month (default) or the specific project\nif you are inside a project folder."
-    )
-    p_exp.add_argument("-s", "--simple", action="store_true", help="Force open the monthly folder even if inside a project")
-
-    # --- SYNC ---
-    subparsers.add_parser(
-        "sync", 
-        help="🧠 Bidirectional Sync (Projects <-> Obsidian)",
-        description="Performs a smart 'Last Write Wins' sync between your Project/00_Notes folders\nand your Obsidian Vault. Handles conflicts by backing up the older version."
-    )
-
-    # --- THUMBS ---
-    subparsers.add_parser(
-        "thumbs", 
-        help="🖼️  Mirror project thumbnails to a global gallery",
-        description="Crawls all projects for '02_Assets/Thumbnails', renames them with dates and project names,\nand copies them to a central 'Thumbnails_Mirror' folder for easy browsing."
-    )
-
-    # --- CLEAN ---
-    subparsers.add_parser(
-        "clean", 
-        help="🧹 Auto-organize the Downloads folder",
-        description=f"Moves files from {DOWNLOADS_PATH} into subfolders (_Images, _Video, _Installers, etc.)\nbased on file extension."
-    )
-
-    # --- SORT EXPORTS ---
-    subparsers.add_parser(
-        "sort-exports", 
-        help="🗂️  File '_Inbox' exports into the Timeline",
-        description="Takes files from 'Exports/_Inbox', reads their creation date, and moves them\ninto the correct 'Year/Month' folder hierarchy."
-    )
+    subparsers.add_parser("sync", help="Sync Notes")
+    subparsers.add_parser("thumbs", help="Update Gallery")
+    subparsers.add_parser("clean", help="Clean Downloads")
+    subparsers.add_parser("sort-exports", help="Sort Export Inbox")
 
     args = parser.parse_args()
+
     if args.command == "new": cmd_new(args)
     elif args.command == "init": cmd_init(args)
     elif args.command == "export": cmd_export(args)
@@ -481,4 +430,5 @@ def main():
     elif args.command == "sort-exports": cmd_sort_exports(args)
     else: parser.print_help()
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
