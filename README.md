@@ -1,5 +1,11 @@
 # 🚀 CreativeOS - The Master Manual
-**Version:** 1.6 (Gold Master)
+### The Central Nervous System for Creative Workflows
+
+> Version: 2.0 (The "Overkill" Update)
+> 
+> Status: Production
+> 
+> Language: Python 3.10+
 **System Architect:** J Star
 
 ```text
@@ -12,176 +18,339 @@
 
 ---
 
-## 🌌 1. System Architecture & Philosophy
+# CreativeOS (COS) CLI
 
-CreativeOS is not just a script; it is a hardware and software philosophy designed to separate **Creation** from **Consumption** and **Archival**.
+### The Central Nervous System for Creative Workflows
 
-### 💾 The Drive Map
-| Drive | Role | Description | Backup Strategy |
-| :--- | :--- | :--- | :--- |
-| **C: (2TB NVMe)** | **CreativeOS** | The Active Workspace. Only contains the OS, Apps, and *Active* Projects. | **Google Drive** (Selective Sync) + **GitHub** |
-| **E: (1TB SSD)** | **The Engine** | High-speed storage for Assets, Cache, Downloads, and AI Models. | **Manual / None** (Replaceable data) |
-| **D: (1TB HDD)** | **The Vault** | Cold storage for Archives, Documents, and Installers. | **OneDrive** (1TB Business) |
+> Version: 2.0 (The "Overkill" Update)
+> 
+> Status: Production
+> 
+> Language: Python 3.10+
 
-### 🧠 The Logic Core
-The system is controlled by `manage.py` (alias: `cos`). It enforces structure using **Metadata Injection**. Every valid project contains a `.project_meta.json` file, which acts as its ID card.
+## 📖 Table of Contents
 
----
+1. [Philosophy & Architecture](#philosophy--architecture)
+    
+2. [Installation & Configuration](#installation--configuration)
+    
+3. [Context Awareness (How it Thinks)](#context-awareness-how-it-thinks)
+    
+4. [Genesis: Creating Projects](#genesis-creating-projects)
+    
+    - [The `new` Command](#the-new-command)
+        
+    - [The `clone` Command](#the-clone-command)
+        
+    - [The `init` Command](#the-init-command)
+        
+5. [The Synapse: Syncing Logic](#the-synapse-syncing-logic)
+    
+6. [Logistics & Asset Management](#logistics--asset-management)
+    
+    - [Cleaning Downloads](#cleaning-downloads)
+        
+    - [Sorting Exports](#sorting-exports)
+        
+    - [Thumbnail Mirroring](#thumbnail-mirroring)
+        
+7. [Lifecycle: Travel & Resurrection](#lifecycle-travel--resurrection)
+    
+    - [Travel (Shuttle Mode)](#travel-shuttle-mode)
+        
+    - [Resurrection (Archive Retrieval)](#resurrection-archive-retrieval)
 
-## 🎮 2. Command Reference: `cos new`
-**Purpose:** Spawns a new project skeleton.
-**Syntax:** `cos new "Name" [flags]`
+## 🧠 Philosophy & Architecture
 
-### 🧩 The Logic Matrix (Where does it go?)
-The script is **Context Aware**. The destination depends on **where** you run the command.
+**CreativeOS (cos)** is not just a file automation script; it is a context-aware wrapper for your entire file system. It bridges the gap between your folder structure (Windows Explorer), your knowledge base (Obsidian), and your archives.
 
-| Your Location in Terminal | Command Ran | Resulting Path | Context Detected |
-| :--- | :--- | :--- | :--- |
-| `C:\Anywhere` | `cos new "Test"` | `01_Projects\Video\Date_Test` | Default Category (Video) |
-| `C:\Anywhere` | `cos new "App" -c code` | `01_Projects\Code\Date_App` | Category Override |
-| `C:\Anywhere` | `cos new "Ad" --client Nike` | `01_Projects\Clients\Nike\Date_Ad` | Client Flag (High Priority) |
-| `...\Clients\Nike` | `cos new "Campaign"` | `...\Clients\Nike\Date_Campaign` | **Auto-Detected Client** |
-| `...\Code` | `cos new "Bot"` | `...\Code\Date_Bot` | **Auto-Detected Category** |
+It relies on a **Hub-and-Spoke** model defined in your `config.json`:
 
-### 🛠 Template Modes (How does it look?)
-The `-c` (Category) and `-s` (Simple) flags determine the folder structure.
+- **Projects Path:** The active workspace where you create.
+    
+- **Vault Path:** The brain (Obsidian) where you think.
+    
+- **Archive Path:** The graveyard/storage for completed works.
+    
+- **Shuttle Path:** The transport layer (External SSDs).
+    
 
-| Flag Combo | Template Used | Folders Created | Best For |
-| :--- | :--- | :--- | :--- |
-| `-c Video` (Default) | `video_project` | Footage, Assets, Resolve, Notes | Standard Editing |
-| `-c Code` | `plain_code` | src, docs | Coding Projects |
-| `-c Web` | `code_project` | notes, src, docs, tests, assets | Full Stack Apps |
-| `-c Music` | `audio_project` | Project_Files, Stems, Exports | DAW Sessions |
-| `-c AI` | `ai_project` | Data, Models, Notebooks, Src | Machine Learning |
-| `-s` / `--simple` | `simple` | **Only** `00_Notes` & `json` | Wrappers, Quick Tasks |
+### The "Soul" of a Project
 
-### 🕰 Time Travel (`-d`)
-**Scenario:** You started a project last week but forgot to make a folder.
-**Command:** `cos new "Late Project" -d "2025-11-10"`
-**Result:** Folder created as `2025-11-10_Late_Project`. Metadata records the past date.
+Every project created or adopted by COS contains a hidden file: `.project_meta.json`. This file is the DNA of the project. It stores:
 
----
+- The Project Name & Slug
+    
+- Creation Date (even if backdated)
+    
+- Client Association
+    
+- Category (Video, Code, Music, AI)
+    
+- Original Template Used
+    
 
-## 🪄 3. Command Reference: `cos init`
-**Purpose:** "Blesses" an existing folder so it becomes part of CreativeOS without deleting its contents.
-**Syntax:** `cos init` (Run inside the folder)
+Without this file, a folder is just a folder. With it, it is a **CreativeOS Node**.
 
-### 🧠 How it works
-1.  **Date Analysis:** It scans all files in the folder, finds the **Median Date**, and sets that as the Project Creation Date.
-2.  **Context Detection:** It looks at the path.
-    *   If inside `Clients\SternUP`, it sets metadata `Client: SternUP`.
-    *   If inside `Video\J_Star_Films`, it sets metadata `Client: J_Star_Films`.
-3.  **Slug Generation:** It creates a virtual slug `YYYY-MM-DD_Name` in the JSON, but **DOES NOT** rename the physical folder (to prevent file-in-use errors).
+## 🔧 Installation & Configuration
 
-**Use Case:** You drag an old hard drive folder `Wedding_Edit_2022` into `01_Projects\Video`. You enter it and run `cos init`. It is now trackable and exportable.
+CreativeOS is managed through a Python script, typically executed via a batch file alias for global access.
 
----
+### Prerequisites
 
-## 📤 4. Command Reference: `cos export`
-**Purpose:** Opens the correct export location.
-**Syntax:** `cos export [flags]`
+1. **Python 3.10+**: Ensure Python is added to your system PATH.
+    
+2. **Dependencies**: The system uses `tqdm` for visual progress bars.
+    
+    ```
+    pip install tqdm
+    ```
+    
 
-### 📍 Context Behavior
-*   **Scenario A (Inside a Project):**
-    *   You are in `...\Clients\Nike\Ad_Campaign`.
-    *   You run `cos export`.
-    *   System reads `.project_meta.json` -> Finds Slug.
-    *   **Result:** Opens `02_Exports\2025\11 - November\2025-11-23_Ad_Campaign`.
-    *   *Note: It auto-creates subfolders: Video, Audio, Thumbnail.*
+### Configuration (`config.json`)
 
-*   **Scenario B (System Root / No Project):**
-    *   You are in `C:\`.
-    *   You run `cos export`.
-    *   **Result:** Opens `02_Exports\2025\11 - November` (The generic month bucket).
+The system cannot function without a central map. Located at `00_System/Config/config.json`, this file defines the physical locations of your workflow.
 
-*   **Scenario C (Forcing Simple Mode):**
-    *   You are inside a project, but you just want to dump a quick render, not make subfolders.
-    *   Run `cos export -s`.
-    *   **Result:** Opens the generic month bucket, ignoring the project context.
+**Critical Paths:**
 
----
+- `root_path`: The anchor for the entire OS.
+    
+- `projects_path`: Where new projects spawn.
+    
+- `templates_path`: Contains `structure.json` files for `simple`, `code`, `video`, etc.
+    
+- `vault_path`: The Obsidian vault root.
+    
+- `shuttle_path`: Drive letter for external backups (e.g., `D:\\Shuttle`).
+    
 
-## 🧠 5. Command Reference: `cos sync`
-**Purpose:** Bidirectional Brain Bridge (Obsidian <-> Projects).
-**Syntax:** `cos sync`
+## 👁️ Context Awareness (How it Thinks)
 
-### 🔄 The Sync Algorithm
-1.  **Scope:** Scans `01_Projects` recursively for `.project_meta.json`.
-2.  **Target:** Maps to `03_Vault\01_Active_Projects\<Project_Slug>`.
-3.  **Conflict Logic (Last Write Wins):**
-    *   If file exists in A but not B -> **Copy**.
-    *   If file exists in both -> **Compare Modified Time**.
-    *   **Safety Net:** If overwriting a file, it creates a `.bak` copy of the loser first.
-4.  **Metadata Injection:** If `Idea.md` is created by `cos`, it automatically injects YAML Frontmatter for Obsidian Dataview tables.
+One of the most powerful features of `cos` is that you rarely need to tell it _where_ you are.
 
----
+### The "3-Level Up" Rule
 
-## 🧹 6. Command Reference: `cos clean`
-**Purpose:** The Janitor. Sorts loose files.
-**Syntax:** `cos clean [flags]`
+When you run a context-dependent command (like `export`, `travel`, or `sync`), COS doesn't just check your current folder. It performs a **recursive upward search**.
 
-*   **Default:** `cos clean` -> Cleans `E:\Downloads` (defined in config).
-*   **Targeted:** `cos clean -t "D:\Old_Desktop"` -> Cleans that specific folder.
+Scenario:
 
-**Sorting Rules:**
-*   `.jpg, .png` -> `_Images`
-*   `.mp4, .mov` -> `_Video`
-*   `.zip, .rar` -> `_Archives`
-*   `.exe, .msi` -> `_Installers`
-*   `.pdf, .docx` -> `_Docs`
+You are working deep inside a project:
 
----
+P:\Active\Video\2023_Nike_Ad\04_Exports\Social_Media\Revisions\
 
-## 🗂 7. Command Reference: `cos sort-exports`
-**Purpose:** The Portal. Files loose exports into the Timeline.
-**Syntax:** `cos sort-exports`
+If you run `cos export` here, COS:
 
-**Workflow:**
-1.  You find a random video file `Final_Render.mp4` from 2023.
-2.  You drag it into `C:\CreativeOS\02_Exports\_Inbox`.
-3.  You run `cos sort-exports`.
-4.  **Result:** The system reads the file date (2023), creates `2023\...\Month`, and moves the file there.
+1. Checks current folder for `.project_meta.json`. (Fail)
+    
+2. Checks `../` (Fail)
+    
+3. Checks `../../` (Fail)
+    
+4. Checks `../../../` -> **Found it!** (`P:\Active\Video\2023_Nike_Ad\.project_meta.json`)
+    
 
----
+**Result:** It opens the Export folder specifically for the "Nike Ad" project, not the generic monthly export folder.
 
-## 🖼 8. Command Reference: `cos thumbs`
-**Purpose:** The Global Gallery.
-**Syntax:** `cos thumbs`
+### Implicit Category Inference
 
-**Workflow:**
-1.  Scans all `01_Projects` for `02_Assets\Thumbnails`.
-2.  Copies any image found to `C:\CreativeOS\04_Global_Assets\Thumbnails_Mirror`.
-3.  **Renaming:** Renames the copy to `Date_ProjectName_OriginalName.jpg`.
-4.  **Result:** A flat, searchable folder containing every thumbnail you have ever designed.
+When running `cos init` or `cos clone` without flags, COS looks at the path string to guess the category.
 
----
+- If path contains `/Clients/`, it extracts the Client name.
+    
+- If path contains `/Code/` or `/Web/`, it sets type to `Code`.
+    
+- If path contains `/AI/`, it sets type to `AI`.
+    
 
-## 🗓 Weekly Maintenance Routine (Friday Protocol)
+## 🚀 Genesis: Creating Projects
 
-1.  **The Cleanup:**
-    *   `cos clean` (Empty your Downloads).
-    *   Check `02_Exports\_Inbox`, run `cos sort-exports`.
-2.  **The Brain:**
-    *   `cos sync` (Update Obsidian).
-3.  **The Gallery:**
-    *   `cos thumbs` (Update portfolio).
-4.  **The Archive:**
-    *   Move any **Finished** client folders from `C:\CreativeOS\01_Projects\Clients` to `D:\OneDrive - Developer\Archive`.
+### The `new` Command
 
----
+Spawns a fresh project based on templates (`simple`, `code`, `video`, `audio`, `ai`). It validates name uniqueness and sets up directory structures.
 
-## ⚠️ Troubleshooting & Recovery
+```
+cos new "Project Name" [flags]
+```
 
-**1. "JSONDecodeError" or "Corrupt Metadata"**
-*   **Cause:** PowerShell created a file with a BOM (invisible character), or the file is empty.
-*   **Fix:** The script now handles BOM automatically. If it persists, delete the `.project_meta.json` file and run `cos init` to regenerate it.
+**Arguments & Flags:**
 
-**2. "Access Denied" on Folders**
-*   **Cause:** You are trying to rename a folder you are currently inside.
-*   **Fix:** `cos init` was patched to *not* rename folders, only update metadata slugs.
+- `name` (Required): The base name (e.g., "Nike Commercial").
+    
+- `-c` / `--category` (Default: "Video"): "Code", "Web", "AI", "Audio".
+    
+- `--client`: Groups the project under a client subfolder (e.g., `.../Clients/Apple/`).
+    
+- `-d` / `--date`: Backdate the project (Format: YYYY-MM-DD).
+    
+- `-g` / `--git`: Initializes a Git repository and adds a universal `.gitignore`.
+    
+- `-s` / `--simple`: Uses a minimal folder structure instead of the full template.
+    
 
-**3. Moving to a New PC**
-1.  Install Python.
-2.  Copy `C:\CreativeOS\00_System` to the new C: drive.
-3.  Add `C:\CreativeOS\00_System\Scripts` to Windows PATH environment variable.
-4.  Run `cos`. You are live.
+**The Logic Flow:**
+
+1. **Sanitization:** Converts "My Cool Project" to `2025-10-24_My_Cool_Project`.
+    
+2. **Routing:** Checks for client flags or category defaults to determine the destination path.
+    
+3. **Templating:** Hydrates the folder based on `structure.json`.
+    
+4. **Metadata:** Generates the JSON DNA and an `Idea.md` note.
+    
+
+**Example:**
+
+```
+cos new "Neural Net Test" -c AI --client "Personal R&D" -g -d "2023-01-01"
+```
+
+### The `clone` Command
+
+Clones a remote Git repository and immediately "Blesses" it into the CreativeOS ecosystem.
+
+```
+cos clone <url> [flags]
+```
+
+**Arguments & Flags:**
+
+- `url` (Required): The https or ssh git URL.
+    
+- `-n` / `--name`: Override the folder name (defaults to repo name).
+    
+- `-c` / `--category` (Default: "Code"): Sets the category metadata.
+    
+- `--client`: Clones directly into a client folder.
+    
+
+Smart Defaults:
+
+Unlike new (which defaults to Video), clone defaults to Code. It automatically creates a .project_meta.json linking back to the Source URL in the metadata.
+
+### The `init` Command
+
+"Adopts" an existing folder that wasn't created via COS.
+
+```
+cos init
+```
+
+**Intelligence:**
+
+- **Smart Date:** Calculates the median timestamp of all files inside to infer the "real" start date of the project.
+    
+- **Path Inference:** Scans the directory tree to auto-assign Client and Category based on where the folder lives.
+    
+
+## ⚡ The Synapse: Syncing Logic
+
+The `cos sync` command is the bridge between your file system and your Obsidian Vault.
+
+```
+cos sync
+```
+
+### The Conflict Resolution Algorithm
+
+This is not a simple copy-paste. It performs a **Bidirectional Sync** on the `00_Notes` folder of every active project.
+
+**For every file (`Idea.md`, `Script.md`), it runs this logic:**
+
+1. **New in Project?** -> Push to Vault.
+    
+2. **New in Vault?** -> Pull to Project.
+    
+3. **Conflict (File exists in both)?**
+    
+    - It compares contents byte-for-byte.
+        
+    - **Timestamps:**
+        
+        - If Project is newer -> Overwrite Vault.
+            
+        - If Vault is newer -> **Safety Mode:**
+            
+            1. Create `Idea.md.bak` in the Project (preserve local work).
+                
+            2. Overwrite Project file with Vault version.
+                
+    - **Anomaly Check:** If timestamps are identical but content differs, it forces a push to Vault to ensure consistency.
+        
+
+## 📦 Logistics & Asset Management
+
+### Cleaning Downloads
+
+Sorts a chaotic folder into `_Images`, `_Video`, `_Installers`, `_Archives`, etc.
+
+```
+cos clean [optional path]
+```
+
+- **Target:** If no path is provided, it defaults to the User's Download folder.
+    
+- **Safety:** It **never** moves folders, only files. It leaves dotfiles (`.DS_Store`, `.ini`) alone.
+    
+- **Fallback:** Unknown extensions go to `_Other`.
+    
+
+### Sorting Exports
+
+Targets your global `_Inbox` (where you might dump quick renders).
+
+```
+cos sort-exports
+```
+
+- **Smart Filing:** Reads the file creation date.
+    
+- **Action:** Moves file to `Exports/YYYY/MM - Month/`.
+    
+- **Versioning:** If `render.mp4` exists in the destination, it automatically renames the incoming file to `render_v2.mp4`, `render_v3.mp4`, etc.
+    
+
+### Thumbnail Mirroring
+
+Walks the entire Project structure looking for `02_Assets/Thumbnails`.
+
+```
+cos thumbs
+```
+
+- **Aggregation:** Copies valid images to a central `Global_Assets/Thumbnails_Mirror` folder.
+    
+- **Renaming:** Prefixes the filename with the Project Date and Name (`2024-10-05_ProjectName_thumb.jpg`) so your global gallery is chronologically sorted.
+    
+
+## ♻️ Lifecycle: Travel & Resurrection
+
+### Travel (Shuttle Mode)
+
+Designed for moving a project from Desktop to a portable SSD (`SHUTTLE_PATH`).
+
+```
+cos travel
+```
+
+- **Prerequisite:** Must be run inside a project (uses Context Awareness).
+    
+- **Mirroring:** Recreates the folder structure on the external drive.
+    
+- **Passport:** Writes a `_TRAVEL_LOG.txt` in the destination folder, logging exactly when the sync happened.
+    
+- **Progress:** Uses `tqdm` for a visual progress bar (essential for large video projects).
+    
+
+### Resurrection (Archive Retrieval)
+
+Brings a project back from the dead (`ARCHIVE_PATH`).
+
+```
+cos resurrect "Project Name"
+```
+
+- **Search:** Scans the Archive for matches.
+    
+- **Recall:** Reads the archived `.project_meta.json` to remember where the project originally belonged (e.g., Code vs Video, Client vs Personal).
+    
+- **Restoration:** Moves the folder back to Active Projects and removes it from Archive.
