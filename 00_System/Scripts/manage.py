@@ -397,6 +397,100 @@ def cmd_thumbs(args):
     print(f"✨ Gallery Updated. {count} new thumbnails.")
     os.startfile(gallery_root)
 
+def cmd_clone(args):
+    """Clones a Git repo and adopts it into CreativeOS."""
+    url = args.url
+    
+    # 1. Determine Project Name from URL if not provided
+    if not args.name:
+        # Extract last part of URL, remove .git if present
+        base_name = url.rstrip("/").split("/")[-1]
+        if base_name.endswith(".git"):
+            base_name = base_name[:-4]
+        project_name = base_name
+    else:
+        project_name = args.name
+
+    # 2. Determine Category (Default to Code for clones, unless specified)
+    # If user didn't specify category, and default is Video, switch to Code because clones are usually code.
+    category = args.category.title()
+    if category == "Video" and not args.category_flag_passed:
+        category = "Code"
+
+    date_prefix = get_date_slug(args.date)
+    safe_name = project_name.replace(" ", "_")
+    slug = f"{date_prefix}_{safe_name}"
+
+    # 3. Location Logic (Same as cmd_new)
+    cwd = os.getcwd()
+    if args.client:
+        target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
+        if not os.path.exists(target_root):
+            os.makedirs(target_root)
+            print(f"✨ Created new Client folder: {args.client}")
+    elif cwd.startswith(PROJECTS_PATH):
+        target_root = cwd
+    else:
+        if category.lower() in ["web", "code"]: phys_cat = "Code"
+        elif category.lower() in ["music", "audio"]: phys_cat = "Music"
+        elif category.lower() == "ai": phys_cat = "AI"
+        else: phys_cat = "Video"
+        target_root = os.path.join(PROJECTS_PATH, phys_cat)
+
+    target_dir = os.path.join(target_root, slug)
+    
+    if os.path.exists(target_dir):
+        print(f"⚠️  Target directory already exists: {target_dir}")
+        return
+
+    print(f"⬇️  Cloning into: {slug}...")
+    print(f"   URL: {url}")
+
+    # 4. Perform Git Clone
+    try:
+        subprocess.run(["git", "clone", url, target_dir], check=True)
+    except Exception as e:
+        print(f"❌ Git Clone failed: {e}")
+        return
+
+    # 5. Bless the Project (Metadata + Notes)
+    print("🪄  Blessing project with CreativeOS metadata...")
+    
+    # Create Notes
+    notes_dir = os.path.join(target_dir, "00_Notes")
+    os.makedirs(notes_dir, exist_ok=True)
+    if not os.path.exists(os.path.join(notes_dir, "Idea.md")):
+        with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
+            f.write(f"# {project_name}\nType: Cloned Repository\nSource: {url}\nDate: {date_prefix}\n")
+
+    # Determine Client for Metadata
+    meta_client = "None"
+    if args.client: meta_client = args.client
+    else:
+        norm_path = target_root.replace("\\", "/")
+        parts = norm_path.split("/")
+        if "Clients" in parts:
+            try: meta_client = parts[parts.index("Clients") + 1]
+            except: pass
+
+    # Write JSON
+    meta = {
+        "name": project_name,
+        "slug": slug,
+        "type": category,
+        "created": date_prefix,
+        "client": meta_client,
+        "template": "git_clone",
+        "repo_url": url,
+        "root": target_dir
+    }
+    with open(os.path.join(target_dir, ".project_meta.json"), "w") as f:
+        json.dump(meta, f, indent=4)
+
+    print(f"✅ Clone Complete!\n   Location: {target_dir}")
+    # Optional: Open VS Code if available, or just the folder
+    # os.system(f"code \"{target_dir}\"")
+
 def cmd_clean(args):
     # Determine which folder to clean
     target_path = args.target if args.target else DOWNLOADS_PATH
@@ -647,120 +741,82 @@ def main():
  | |___| | |  __/ (_| ||  _  | \ V /  __/ |_| |___) |
   \____|_|  \___|\__,_||_| |_|  \_/ \___|\___/|____/
     """
-    
+
     help_text = f"""{banner}
     The Central Nervous System for your Creative Workflow.
     ====================================================
 
-    1. CREATION COMMANDS
-    --------------------
-    cos new "Name" [flags]
-        Creates a new project. Context-aware: detects where you are.
-        
-        Flags:
-          -c, --category  : Template (Video, Code, Web, Music, AI). Default: Video.
-          -s, --simple    : "Wrapper Mode". Creates ONLY Metadata + Notes. No subfolders.
-          -d, --date      : "Time Travel". Force specific date (YYYY-MM-DD).
-          --client        : Force project into specific Client folder.
+    1. CREATION
+    -----------
+    cos new "Name" [flags]          Create fresh project
+    cos clone <url> [flags]         Clone Git repo & adopt into OS
+    cos init                        Adopt current folder
 
-        Examples:
-          cos new "Nike Ad"                     -> 01_Projects/Video/Date_Nike_Ad
-          cos new "React App" -c web            -> 01_Projects/Code/Date_React_App
-          cos new "Beat 1" -c music --simple    -> 01_Projects/Music/Date_Beat_1 (Empty shell)
-          cos new "Campaign" --client SternUP   -> 01_Projects/Clients/SternUP/Date_Campaign
+    Flags for new/clone:
+      -c, --category  : (Video, Code, Web, AI). Clone defaults to Code.
+      --client "Name" : Group under a Client.
+      -d, --date      : Backdate the project.
 
-    cos init
-        "Blesses" an existing folder. Run this INSIDE a folder you just dragged in.
-        - Calculates "Smart Date" (median file date).
-        - Generates .project_meta.json.
-        - Creates Note file.
-        - Does NOT rename the folder (Safety first).
-
-    2. WORKFLOW COMMANDS
-    --------------------
-    cos export [flags]
-        Opens the correct export destination.
-        - Inside a Project: Opens `02_Exports/Year/Month/ProjectName`.
-        - Outside a Project: Opens `02_Exports/Year/Month` (Generic bucket).
-        
-        Flags:
-          -s, --simple    : Force open the Generic Month bucket, even if inside a project.
-
-    cos sync
-        Bidirectional Brain Bridge. Syncs `00_Notes` <-> Obsidian Vault.
-        - Strategy: Last Write Wins.
-        - Safety: Creates .bak files on conflict.
-        - Injects Dataview YAML metadata automatically.
-
-    3. MAINTENANCE COMMANDS
-    -----------------------
-    cos clean [flags]
-        The Janitor. Sorts loose files into _Images, _Video, _Installers, etc.
-        
-        Flags:
-          -t, --target    : Specify folder to clean. (Default: E:\\Downloads)
-        
-        Examples:
-          cos clean                     (Cleans Downloads)
-          cos clean -t "C:\\Desktop"    (Cleans Desktop)
-
-    cos sort-exports
-        The Portal. Moves files from `02_Exports/_Inbox` into the Timeline.
-        - Reads file creation date.
-        - Moves to `02_Exports/YYYY/MM - Month`.
-
-    cos thumbs
-        The Gallery. Scans all projects for `02_Assets/Thumbnails`.
-        - Copies them to `04_Global_Assets/Thumbnails_Mirror`.
-        - Renames with Date + Project Name.
+    2. MAINTENANCE
+    --------------
+    cos sync          : Sync Notes <-> Obsidian
+    cos export        : Open Export Folder
+    cos thumbs        : Update Thumbnail Gallery
+    cos clean         : Sort Downloads
+    cos sort-exports  : Sort _Inbox
+    cos travel        : Copy to Shuttle Drive
+    cos resurrect     : Restore from Archive
     """
-    
+
     parser = argparse.ArgumentParser(
-        description=help_text, 
+        description=help_text,
         formatter_class=RawTextHelpFormatter,
         usage="cos <command> [options]"
     )
-    
+
     subparsers = parser.add_subparsers(dest="command", title="Commands")
-    
+
     # --- NEW ---
     p_new = subparsers.add_parser("new", help="🚀 Spawn a new project")
-    p_new.add_argument("name", type=str, help="Project Name")
-    p_new.add_argument("-c", "--category", type=str, default="Video", help="Category: Video, Code, Web, Music, AI")
-    p_new.add_argument("-s", "--simple", action="store_true", help="Use minimal template (Notes + Meta only)")
-    p_new.add_argument("-d", "--date", type=str, help="Override date (YYYY-MM-DD)")
-    p_new.add_argument("--client", type=str, help="Group under specific Client")
+    p_new.add_argument("name", type=str)
+    p_new.add_argument("-c", "--category", type=str, default="Video")
+    p_new.add_argument("-s", "--simple", action="store_true")
+    p_new.add_argument("-d", "--date", type=str)
+    p_new.add_argument("--client", type=str)
     p_new.add_argument("-g", "--git", action="store_true", help="Initialize Git repository")
 
+    # --- CLONE ---
+    p_clone = subparsers.add_parser("clone", help="⬇️  Clone a repo into CreativeOS")
+    p_clone.add_argument("url", type=str, help="Git URL")
+    p_clone.add_argument("-n", "--name", type=str, help="Optional custom name")
+    p_clone.add_argument("-c", "--category", type=str, default="Video")
+    p_clone.add_argument("-d", "--date", type=str)
+    p_clone.add_argument("--client", type=str)
+
     # --- INIT ---
-    subparsers.add_parser("init", help="🪄  Adopt current folder into OS")
+    subparsers.add_parser("init", help="🪄  Adopt current folder")
 
     # --- EXPORT ---
     p_exp = subparsers.add_parser("export", help="📂 Open export location")
-    p_exp.add_argument("-s", "--simple", action="store_true", help="Force month bucket")
+    p_exp.add_argument("-s", "--simple", action="store_true")
 
-    # --- SYNC ---
-    subparsers.add_parser("sync", help="🧠 Sync Notes <-> Obsidian")
+    # --- UTILS ---
+    subparsers.add_parser("sync", help="🧠 Sync Notes")
+    subparsers.add_parser("thumbs", help="🖼️  Update Gallery")
+    subparsers.add_parser("clean", help="🧹 Sort Downloads")
+    subparsers.add_parser("sort-exports", help="🗂️  Sort Inbox")
+    subparsers.add_parser("travel", help="🚀 Copy to Shuttle")
 
-    # --- THUMBS ---
-    subparsers.add_parser("thumbs", help="🖼️  Update Thumbnail Gallery")
-
-    # --- CLEAN ---
-    p_clean = subparsers.add_parser("clean", help="🧹 Sort Downloads or Target")
-    p_clean.add_argument("-t", "--target", type=str, help="Specific folder to clean")
-
-    # --- SORT EXPORTS ---
-    subparsers.add_parser("sort-exports", help="🗂️  File _Inbox -> Timeline")
-
-    # --- TRAVEL ---
-    subparsers.add_parser("travel", help="🚀 Copy Project to External Shuttle")
-    
     # --- RESURRECT ---
-    subparsers.add_parser("resurrect", help="🕯️ Restore project from Archive").add_argument("name", type=str)
-    
+    subparsers.add_parser("resurrect", help="🕯️ Restore from Archive").add_argument("name", type=str)
+
     args = parser.parse_args()
 
+    # Hack to detect if user actually typed -c (for defaults logic in clone)
+    args.category_flag_passed = "-c" in sys.argv or "--category" in sys.argv
+
     if args.command == "new": cmd_new(args)
+    elif args.command == "clone": cmd_clone(args)
     elif args.command == "init": cmd_init(args)
     elif args.command == "export": cmd_export(args)
     elif args.command == "sync": cmd_sync(args)
