@@ -25,6 +25,7 @@ EXPORTS_PATH = CONFIG["exports_path"]
 TEMPLATES_PATH = CONFIG["templates_path"]
 VAULT_PATH = CONFIG["vault_path"]
 DOWNLOADS_PATH = CONFIG.get("downloads_path", os.path.join(os.path.expanduser("~"), "Downloads"))
+SHUTTLE_PATH = CONFIG.get("shuttle_path", "A:\\CreativeOS_Shuttle")
 
 # --- HELPERS ---
 
@@ -429,6 +430,51 @@ def cmd_sort_exports(args):
         except Exception as e: print(f"  ❌ Error: {e}")
     print(f"✨ Sorted {count} items.")
 
+def cmd_travel(args):
+    """Copies the current project to the External Shuttle Drive."""
+    meta, project_root = find_meta_in_cwd()
+    
+    if not meta:
+        print("❌ Error: You must be inside an initialized project to use 'travel'.")
+        return
+
+    print(f"🚀 Prepping Shuttle Launch for: {meta['name']}...")
+    
+    if not os.path.exists(SHUTTLE_PATH):
+        print(f"❌ Error: Shuttle Drive not found at: {SHUTTLE_PATH}")
+        print("   (Check your config.json or plug in the drive)")
+        return
+
+    # 1. Determine Destination Structure
+    rel_path = os.path.relpath(project_root, PROJECTS_PATH)
+    dest_path = os.path.join(SHUTTLE_PATH, "Projects", rel_path)
+
+    print(f"   Source: {project_root}")
+    print(f"   Target: {dest_path}")
+    
+    confirm = input("   Start copy? This might take a while for video. (y/n): ")
+    if confirm.lower() != 'y': return
+
+    # 2. Copy Process
+    try:
+        if os.path.exists(dest_path):
+            print("   ⚠️  Target exists. Updating files...")
+            shutil.copytree(project_root, dest_path, dirs_exist_ok=True)
+        else:
+            shutil.copytree(project_root, dest_path)
+        
+        # 3. Stamp the Passport
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(os.path.join(dest_path, "_TRAVEL_LOG.txt"), "a") as f:
+            f.write(f"Synced from Desktop at: {timestamp}\n")
+            
+        print(f"✅ Travel Ready! Project copied to Shuttle.")
+        print(f"   Don't forget to Eject safely.")
+        os.startfile(dest_path)
+        
+    except Exception as e:
+        print(f"❌ Copy failed: {e}")
+
 # --- MAIN ---
 
 def main():
@@ -543,6 +589,9 @@ def main():
     # --- SORT EXPORTS ---
     subparsers.add_parser("sort-exports", help="🗂️  File _Inbox -> Timeline")
 
+    # --- TRAVEL ---
+    subparsers.add_parser("travel", help="🚀 Copy Project to External Shuttle")
+
     args = parser.parse_args()
 
     if args.command == "new": cmd_new(args)
@@ -552,6 +601,7 @@ def main():
     elif args.command == "thumbs": cmd_thumbs(args)
     elif args.command == "clean": cmd_clean(args)
     elif args.command == "sort-exports": cmd_sort_exports(args)
+    elif args.command == "travel": cmd_travel(args)
     else: parser.print_help()
 
 if __name__ == "__main__":
