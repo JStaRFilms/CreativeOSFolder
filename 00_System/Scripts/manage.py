@@ -7,6 +7,10 @@ import shutil
 import statistics
 import filecmp
 from argparse import RawTextHelpFormatter
+from tqdm import tqdm
+import time
+import stat
+import subprocess
 
 # --- CONFIG LOAD ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +30,7 @@ TEMPLATES_PATH = CONFIG["templates_path"]
 VAULT_PATH = CONFIG["vault_path"]
 DOWNLOADS_PATH = CONFIG.get("downloads_path", os.path.join(os.path.expanduser("~"), "Downloads"))
 SHUTTLE_PATH = CONFIG.get("shuttle_path", "A:\\CreativeOS_Shuttle")
+ARCHIVE_PATH = CONFIG.get("archive_path", "D:\\OneDrive - Developer\\Archive")
 
 # --- HELPERS ---
 
@@ -116,6 +121,54 @@ def sync_two_folders(dir_a, dir_b):
             except Exception as e: logs.append(f"  ❌ Error syncing {filename}: {e}")
     
     return logs
+def copy_with_progress(src, dst):
+    """Copies files from src to dst, showing a progress bar."""
+    # Ensure the destination directory exists
+    os.makedirs(dst, exist_ok=True)
+    
+    # Walk through the source directory to get a list of all files
+    all_files = []
+    for root, _, files in os.walk(src):
+        for name in files:
+            all_files.append(os.path.join(root, name))
+
+    # Use tqdm to show progress
+    for f in tqdm(all_files, desc="Shuttling Files", unit="file"):
+        rel_path = os.path.relpath(f, src)
+        dest_file_path = os.path.join(dst, rel_path)
+        
+        # Create directory for the file if it doesn't exist
+        os.makedirs(os.path.dirname(dest_file_path), exist_ok=True)
+        
+        # Copy the file
+        shutil.copy2(f, dest_file_path)
+
+def setup_git(project_path, category):
+    """Initializes Git and adds .gitignore."""
+    print("   🔧 Initializing Git Repository...")
+    
+    # 1. Run git init
+    try:
+        subprocess.run(["git", "init"], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
+    except FileNotFoundError:
+        print("   ⚠️  Git is not installed or not in PATH. Skipping.")
+        return
+    except Exception as e:
+        print(f"   ❌ Git init failed: {e}")
+        return
+
+    # 2. Copy .gitignore
+    gitignore_src = os.path.join(TEMPLATES_PATH, "universal.gitignore")
+    gitignore_dest = os.path.join(project_path, ".gitignore")
+    
+    if os.path.exists(gitignore_src):
+        shutil.copy2(gitignore_src, gitignore_dest)
+    else:
+        # Fallback if template missing
+        with open(gitignore_dest, "w") as f:
+            f.write("# CreativeOS Auto-Gitignore\nnode_modules/\n__pycache__/\n.env\n")
+
+    print("   ✅ Git initialized & .gitignore added.")
 
 # --- COMMANDS ---
 
@@ -210,6 +263,10 @@ tags: [creativeos]
     }
     with open(os.path.join(target_dir, ".project_meta.json"), "w") as f:
         json.dump(meta, f, indent=4)
+    # 8. Git Setup (Only if requested)
+    if args.git:
+        setup_git(target_dir, category)
+    
     print(f"✅ Spawned at: {target_dir}")
 
 def cmd_init(args):
@@ -457,13 +514,11 @@ def cmd_travel(args):
 
     # 2. Copy Process
     try:
-        if os.path.exists(dest_path):
-            print("   ⚠️  Target exists. Updating files...")
-            shutil.copytree(project_root, dest_path, dirs_exist_ok=True)
-        else:
-            shutil.copytree(project_root, dest_path)
+        print("   Calculating files to copy...")
+        # The new function handles both creation and update.
+        copy_with_progress(project_root, dest_path)
         
-        # 3. Stamp the Passport
+    # 3. Stamp the Passport
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(os.path.join(dest_path, "_TRAVEL_LOG.txt"), "a") as f:
             f.write(f"Synced from Desktop at: {timestamp}\n")
@@ -474,6 +529,113 @@ def cmd_travel(args):
         
     except Exception as e:
         print(f"❌ Copy failed: {e}")
+
+def remove_readonly(func, path, excinfo):
+    """Error handler for shutil.rmtree that handles read-only files."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+def robust_rmtree(path, retries=5, delay=1):
+    """A more robust version of rmtree that handles OneDrive locking."""
+    for i in range(retries):
+        try:
+            shutil.rmtree(path, onerror=remove_readonly)
+            return True
+        except OSError as e:
+            print(f"Attempt {i+1}/{retries}: Failed to remove {path}. Retrying in {delay}s... Error: {e}")
+            time.sleep(delay)
+    print(f"❌ Failed to remove directory after {retries} retries: {path}")
+    return False
+
+def cmd_resurrect(args):
+    """Brings a project back from the dead (Archive -> Active)."""
+    search_term = args.name.lower()
+    print(f"Searching Archive for: '{args.name}'...")
+    
+    if not os.path.exists(ARCHIVE_PATH):
+        print(f"Error: Archive path not found: {ARCHIVE_PATH}")
+        return
+
+    # 1. Search for matching folders
+    matches = []
+    for root, dirs, files in os.walk(ARCHIVE_PATH):
+        # Only look at top-level folders in archive or client subfolders to avoid deep scanning
+        # Simplified: Just look at immediate children of Archive + children of "Clients" in Archive
+        for d in dirs:
+            if search_term in d.lower():
+                matches.append(os.path.join(root, d))
+        # Don't go too deep
+        if root.count(os.sep) - ARCHIVE_PATH.count(os.sep) > 1:
+            del dirs[:]
+
+    if not matches:
+        print("No matching projects found in Archive.")
+        return
+
+    # 2. Select Project
+    selected_path = matches[0]
+    if len(matches) > 1:
+        print("Multiple matches found:")
+        for i, m in enumerate(matches):
+            print(f"   {i+1}. {m}")
+        try:
+            choice = int(input("Select project number: ")) - 1
+            selected_path = matches[choice]
+        except:
+            print("Invalid selection.")
+            return
+
+    project_name = os.path.basename(selected_path)
+    print(f"Resurrecting: {project_name}")
+
+    # 3. Determine Destination (Read old metadata if possible)
+    category = "Video" # Default fallback
+    meta_path = os.path.join(selected_path, ".project_meta.json")
+    
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8-sig") as f:
+                meta = json.load(f)
+                category = meta.get("type", "Video")
+                # Handle Client context
+                if meta.get("client") and meta.get("client") != "None":
+                    dest_root = os.path.join(PROJECTS_PATH, "Clients", meta["client"])
+                else:
+                    # Map category to folder
+                    if category.lower() in ["web", "code"]: dest_cat = "Code"
+                    elif category.lower() in ["music", "audio"]: dest_cat = "Music"
+                    elif category.lower() == "ai": dest_cat = "AI"
+                    else: dest_cat = "Video"
+                    dest_root = os.path.join(PROJECTS_PATH, dest_cat)
+        except:
+            dest_root = os.path.join(PROJECTS_PATH, "Video") # Fallback
+    else:
+        # No metadata? Ask user or default to Video
+        dest_root = os.path.join(PROJECTS_PATH, "Video")
+
+    # Ensure destination parent exists
+    if not os.path.exists(dest_root):
+        os.makedirs(dest_root)
+
+    final_dest = os.path.join(dest_root, project_name)
+
+    if os.path.exists(final_dest):
+        print(f"Warning: Project already exists in Active Projects: {final_dest}")
+        return
+
+    # 4. Move
+    try:
+        print("Copying project from archive...")
+        shutil.copytree(selected_path, final_dest)
+        
+        print("Removing project from archive...")
+        if robust_rmtree(selected_path):
+            print(f"✨ LIVE! Project moved to:\n   {final_dest}")
+            os.startfile(final_dest)
+        else:
+            print(f"❌ Could not remove the project from the archive. It has been copied, but the original may still exist.")
+    except Exception as e:
+        print(f"❌ An unexpected error occurred: {e}")
 
 # --- MAIN ---
 
@@ -568,6 +730,7 @@ def main():
     p_new.add_argument("-s", "--simple", action="store_true", help="Use minimal template (Notes + Meta only)")
     p_new.add_argument("-d", "--date", type=str, help="Override date (YYYY-MM-DD)")
     p_new.add_argument("--client", type=str, help="Group under specific Client")
+    p_new.add_argument("-g", "--git", action="store_true", help="Initialize Git repository")
 
     # --- INIT ---
     subparsers.add_parser("init", help="🪄  Adopt current folder into OS")
@@ -591,7 +754,10 @@ def main():
 
     # --- TRAVEL ---
     subparsers.add_parser("travel", help="🚀 Copy Project to External Shuttle")
-
+    
+    # --- RESURRECT ---
+    subparsers.add_parser("resurrect", help="🕯️ Restore project from Archive").add_argument("name", type=str)
+    
     args = parser.parse_args()
 
     if args.command == "new": cmd_new(args)
@@ -602,6 +768,7 @@ def main():
     elif args.command == "clean": cmd_clean(args)
     elif args.command == "sort-exports": cmd_sort_exports(args)
     elif args.command == "travel": cmd_travel(args)
+    elif args.command == "resurrect": cmd_resurrect(args)
     else: parser.print_help()
 
 if __name__ == "__main__":

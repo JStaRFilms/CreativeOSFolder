@@ -5,6 +5,7 @@
     "templates_path": "C:\\CreativeOS\\00_System\\Templates",
     "vault_path": "C:\\CreativeOS\\03_Vault",
     "downloads_path": "E:\\Downloads",
-    "version": "1.1",
-    "shuttle_path": "A:\\CreativeOS_Shuttle"
+    "shuttle_path": "A:\\CreativeOS_Shuttle",
+    "archive_path": "D:\\OneDrive - MSFT\\Archive",
+    "version": "1.3"
 }
