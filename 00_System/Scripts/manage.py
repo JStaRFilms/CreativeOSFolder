@@ -195,15 +195,22 @@ def setup_git(project_path, category):
 
     console.print("   [success]✅ Git initialized & .gitignore added.[/success]")
 
-    # 3. Initial Commit
-    if Confirm.ask("Perform initial git commit now?"):
+    # 3. Initial Commit Prompt
+    console.print("")
+    console.print("   [info]📦 An initial commit will stage all project files and commit them with the message:[/info]")
+    console.print("      [dim]\"Initial commit via CreativeOS Genesis\"[/dim]")
+    console.print("")
+    
+    if Confirm.ask("   Make initial commit now?", default=True):
         try:
-            with console.status("[bold cyan]Committing...[/bold cyan]"):
+            with console.status("[bold cyan]   Staging and committing...[/bold cyan]"):
                 subprocess.run(["git", "add", "."], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
                 subprocess.run(["git", "commit", "-m", "Initial commit via CreativeOS Genesis"], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
-            console.print("   [success]✅ Initial commit performed.[/success]")
+            console.print("   [success]✅ Initial commit complete.[/success]")
         except Exception as e:
             console.print(f"   [error]❌ Initial commit failed: {e}[/error]")
+    else:
+        console.print("   [dim]Skipped initial commit. You can commit manually later.[/dim]")
 
 # --- COMMANDS ---
 
@@ -312,10 +319,10 @@ tags: [creativeos]
         }
         with open(os.path.join(target_dir, ".project_meta.json"), "w") as f:
             json.dump(meta, f, indent=4)
-        
-        # Git Setup
-        if args.git:
-            setup_git(target_dir, category)
+    
+    # Git Setup (outside spinner context so prompts are visible)
+    if args.git:
+        setup_git(target_dir, category)
     
     console.print(Panel(f"Project successfully spawned at:\n[path]{target_dir}[/path]", style="bold green", title="✅ Success"))
 
