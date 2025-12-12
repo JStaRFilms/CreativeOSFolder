@@ -1,19 +1,19 @@
 # --- IGNORE EVERYTHING ---
-# We ignore the massive data folders so the Root Git doesn't scan them
-01_Projects/
-02_Exports/
-03_Vault/
-04_Global_Assets/
-E_Drive_Links/
+# Ignore everything in the root by default to keep the repo clean
+*
 
-# --- IGNORE SYSTEM JUNK ---
+# --- ALLOWLIST (Resurrect these specific items) ---
+!00_System/
+!README.md
+!USER MANUAL.md
+!install_cos.py
+!.gitignore
+
+# --- GLOBAL WRAPPERS (Ignore these everywhere, even in allowed folders) ---
 .DS_Store
 Thumbs.db
 *.log
 *.tmp
-
-# --- ALLOWLIST (Only track these) ---
-# We explicitly allow the System folder because that is what you want to back up
-!00_System/
-!README.md
-!.gitignore
+*.bak
+__pycache__/
+.tmp.driveupload/

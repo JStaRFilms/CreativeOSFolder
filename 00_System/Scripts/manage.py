@@ -195,6 +195,16 @@ def setup_git(project_path, category):
 
     console.print("   [success]✅ Git initialized & .gitignore added.[/success]")
 
+    # 3. Initial Commit
+    if Confirm.ask("Perform initial git commit now?"):
+        try:
+            with console.status("[bold cyan]Committing...[/bold cyan]"):
+                subprocess.run(["git", "add", "."], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
+                subprocess.run(["git", "commit", "-m", "Initial commit via CreativeOS Genesis"], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
+            console.print("   [success]✅ Initial commit performed.[/success]")
+        except Exception as e:
+            console.print(f"   [error]❌ Initial commit failed: {e}[/error]")
+
 # --- COMMANDS ---
 
 def cmd_new(args):

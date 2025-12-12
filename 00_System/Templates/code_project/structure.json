@@ -1,7 +1,9 @@
 {
     "00_Notes": ["DevLog.md", "Specs.md", "Tasks.md"],
     "src": [],
-    "docs": [],
+    "docs": ["Project_Requirements.md", "Coding_Guidelines.md"],
+    "docs/mockups": [],
+    "docs/features": [],
     "tests": [],
     "assets": [],
     "build": []
