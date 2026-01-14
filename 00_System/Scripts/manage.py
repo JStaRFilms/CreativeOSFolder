@@ -91,35 +91,50 @@ def get_smart_date(path):
     if not timestamps: return os.path.getmtime(path)
     return statistics.median(timestamps)
 
+def get_syncable_files(root_dir):
+    """Recursively find all .md and .pdf files, returning relative paths."""
+    ALLOWED_EXTENSIONS = {".md", ".pdf"}
+    files = set()
+    for root, _, filenames in os.walk(root_dir):
+        for f in filenames:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in ALLOWED_EXTENSIONS:
+                full_path = os.path.join(root, f)
+                rel_path = os.path.relpath(full_path, root_dir)
+                files.add(rel_path)
+    return files
+
 def sync_two_folders(dir_a, dir_b):
-    """Bidirectional Sync: A (Project) <-> B (Vault)"""
+    """Bidirectional Sync: A (Project) <-> B (Vault). Recursively syncs .md and .pdf files."""
     if not os.path.exists(dir_a): os.makedirs(dir_a)
     if not os.path.exists(dir_b): os.makedirs(dir_b)
 
-    files_a = set(f for f in os.listdir(dir_a) if f.endswith(".md"))
-    files_b = set(f for f in os.listdir(dir_b) if f.endswith(".md"))
+    files_a = get_syncable_files(dir_a)
+    files_b = get_syncable_files(dir_b)
     all_files = files_a.union(files_b)
     logs = []
 
-    for filename in all_files:
-        path_a = os.path.join(dir_a, filename)
-        path_b = os.path.join(dir_b, filename)
+    for rel_path in all_files:
+        path_a = os.path.join(dir_a, rel_path)
+        path_b = os.path.join(dir_b, rel_path)
 
         # Case 1: New in A
-        if filename in files_a and filename not in files_b:
+        if rel_path in files_a and rel_path not in files_b:
             try:
+                os.makedirs(os.path.dirname(path_b), exist_ok=True)
                 shutil.copy2(path_a, path_b)
-                logs.append({"type": "push", "file": filename, "msg": "Pushed to Vault"})
-            except Exception as e: logs.append({"type": "error", "file": filename, "msg": str(e)})
+                logs.append({"type": "push", "file": rel_path, "msg": "Pushed to Vault"})
+            except Exception as e: logs.append({"type": "error", "file": rel_path, "msg": str(e)})
 
         # Case 2: New in B
-        elif filename in files_b and filename not in files_a:
+        elif rel_path in files_b and rel_path not in files_a:
             try:
+                os.makedirs(os.path.dirname(path_a), exist_ok=True)
                 shutil.copy2(path_b, path_a)
-                logs.append({"type": "pull", "file": filename, "msg": "Pulled from Vault"})
-            except Exception as e: logs.append({"type": "error", "file": filename, "msg": str(e)})
+                logs.append({"type": "pull", "file": rel_path, "msg": "Pulled from Vault"})
+            except Exception as e: logs.append({"type": "error", "file": rel_path, "msg": str(e)})
 
-        # Case 3: Conflict
+        # Case 3: Conflict - file exists in both
         else:
             try:
                 if not filecmp.cmp(path_a, path_b, shallow=False):
@@ -128,17 +143,17 @@ def sync_two_folders(dir_a, dir_b):
                     
                     if mtime_a > mtime_b:
                         shutil.copy2(path_a, path_b)
-                        logs.append({"type": "update_vault", "file": filename, "msg": "Updated Vault"})
+                        logs.append({"type": "update_vault", "file": rel_path, "msg": "Updated Vault"})
                     elif mtime_b > mtime_a:
                         # Create safety backup
                         shutil.copy2(path_a, path_a + ".bak")
                         shutil.copy2(path_b, path_a)
-                        logs.append({"type": "update_project", "file": filename, "msg": "Updated Project (Backup made)"})
+                        logs.append({"type": "update_project", "file": rel_path, "msg": "Updated Project (Backup made)"})
                     else:
                         # Timestamps equal but content differs. Force push to Vault to resolve.
                         shutil.copy2(path_a, path_b)
-                        logs.append({"type": "conflict", "file": filename, "msg": "Content mismatch. Forced Push."})
-            except Exception as e: logs.append({"type": "error", "file": filename, "msg": str(e)})
+                        logs.append({"type": "conflict", "file": rel_path, "msg": "Content mismatch. Forced Push."})
+            except Exception as e: logs.append({"type": "error", "file": rel_path, "msg": str(e)})
     
     return logs
 
