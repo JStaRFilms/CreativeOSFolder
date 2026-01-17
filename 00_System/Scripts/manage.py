@@ -1,4 +1,5 @@
 import os
+import urllib.request
 import json
 import argparse
 import datetime
@@ -56,7 +57,18 @@ ARCHIVE_PATH = CONFIG.get("archive_path", "D:\\OneDrive - Developer\\Archive")
 
 def get_date_slug(override_date=None):
     if override_date: return override_date
+    if override_date: return override_date
     return datetime.datetime.now().strftime("%Y-%m-%d")
+
+def format_path(path):
+    """Returns a clickable rich string for the given path."""
+    try:
+        abs_path = os.path.abspath(path)
+        url = urllib.request.pathname2url(abs_path)
+        return f"[link=file:{url}][path]{path}[/path][/link]"
+    except:
+        return f"[path]{path}[/path]"
+
 
 def get_export_month_path():
     now = datetime.datetime.now()
@@ -261,7 +273,7 @@ def cmd_new(args):
     info_table.add_row("Project Name", f"[project]{project_name}[/project]")
     info_table.add_row("Slug", slug)
     info_table.add_row("Category", category)
-    info_table.add_row("Location", f"[path]{target_dir}[/path]")
+    info_table.add_row("Location", format_path(target_dir))
     if args.client: info_table.add_row("Client", args.client)
     
     console.print(Panel(info_table, title="🚀 Launching New Project", border_style="purple"))
@@ -339,7 +351,7 @@ tags: [creativeos]
     if args.git:
         setup_git(target_dir, category)
     
-    console.print(Panel(f"Project successfully spawned at:\n[path]{target_dir}[/path]", style="bold green", title="✅ Success"))
+    console.print(Panel(f"Project successfully spawned at:\n{format_path(target_dir)}", style="bold green", title="✅ Success"))
 
 def cmd_init(args):
     cwd = os.getcwd()
@@ -421,10 +433,10 @@ def cmd_export(args):
     if meta and not args.simple:
         path = os.path.join(month_path, meta["slug"])
         for s in ["Video", "Thumbnail", "Audio"]: os.makedirs(os.path.join(path, s), exist_ok=True)
-        console.print(f"📂 Opening Project Export: [path]{path}[/path]")
+        console.print(f"📂 Opening Project Export: {format_path(path)}")
         os.startfile(path)
     else:
-        console.print(f"📂 Opening Month Export: [path]{month_path}[/path]")
+        console.print(f"📂 Opening Month Export: {format_path(month_path)}")
         os.startfile(month_path)
 
 def cmd_sync(args):
@@ -549,7 +561,7 @@ def cmd_clone(args):
     # Info Panel
     info_table = Table(show_header=False, box=box.SIMPLE)
     info_table.add_row("Source", url)
-    info_table.add_row("Destination", f"[path]{target_dir}[/path]")
+    info_table.add_row("Destination", format_path(target_dir))
     console.print(Panel(info_table, title="⬇️  Cloning Repository", border_style="cyan"))
 
     # 4. Perform Git Clone
@@ -586,12 +598,12 @@ def cmd_clone(args):
     with open(os.path.join(target_dir, ".project_meta.json"), "w") as f:
         json.dump(meta, f, indent=4)
 
-    console.print(Panel(f"Clone Complete!\n[path]{target_dir}[/path]", style="success"))
+    console.print(Panel(f"Clone Complete!\n{format_path(target_dir)}", style="success"))
 
 def cmd_clean(args):
     target_path = args.target if args.target else DOWNLOADS_PATH
 
-    console.print(f"[bold cyan]🧹 Cleaning: [path]{target_path}[/path]...[/bold cyan]")
+    console.print(f"[bold cyan]🧹 Cleaning: {format_path(target_path)}...[/bold cyan]")
     if not os.path.exists(target_path):
         console.print(f"[error]❌ Error: Path not found: {target_path}[/error]")
         return
@@ -656,7 +668,7 @@ def cmd_sort_exports(args):
         os.startfile(inbox_path)
         return
         
-    console.print(f"🗂️  Sorting Inbox: [path]{inbox_path}[/path]...")
+    console.print(f"🗂️  Sorting Inbox: {format_path(inbox_path)}...")
     
     if not os.listdir(inbox_path):
         console.print("[success]✅ Inbox is empty.[/success]")
@@ -709,8 +721,8 @@ def cmd_travel(args):
     rel_path = os.path.relpath(project_root, PROJECTS_PATH)
     dest_path = os.path.join(SHUTTLE_PATH, "Projects", rel_path)
 
-    console.print(f"Source: [path]{project_root}[/path]")
-    console.print(f"Target: [path]{dest_path}[/path]")
+    console.print(f"Source: {format_path(project_root)}")
+    console.print(f"Target: {format_path(dest_path)}")
     
     if not Confirm.ask("Start copy? This might take a while for video."): return
 
@@ -721,7 +733,7 @@ def cmd_travel(args):
         with open(os.path.join(dest_path, "_TRAVEL_LOG.txt"), "a") as f:
             f.write(f"Synced from Desktop at: {timestamp}\n")
             
-        console.print(Panel(f"Project ready for travel!\n[path]{dest_path}[/path]", title="✅ Launch Successful", style="success"))
+        console.print(Panel(f"Project ready for travel!\n{format_path(dest_path)}", title="✅ Launch Successful", style="success"))
         console.print("   [info]Don't forget to Eject safely.[/info]")
         os.startfile(dest_path)
         
