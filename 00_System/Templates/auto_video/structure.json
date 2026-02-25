@@ -24,5 +24,8 @@
         "Subtitles"
     ],
     "04_Previews": [],
+    "05_Scripts": [
+        "Script.md"
+    ],
     "99_Archive": []
 }
