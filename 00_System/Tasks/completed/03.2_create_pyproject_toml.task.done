@@ -1,0 +1,22 @@
+# Task Completion Summary
+
+**Task:** 03.2 Create pyproject.toml
+**Completed At:** 2026-02-25T13:17:30+01:00
+**Mode:** Code
+
+## Results
+
+Created a modern `pyproject.toml` file at the root directory according to instructions, containing project metadata, application descriptions, and configuring `pytest`, `mypy`, and `ruff`. Set the repository URLs to `https://github.com/JStaRFilms/CreativeOSFolder`.
+
+## Files Created/Modified
+
+- `pyproject.toml` (CREATED)
+
+## Verification Status
+
+- [x] TOML Syntax valid: PASS
+- [x] Tested with pip build capabilities: PASS
+
+## Notes
+
+Repository URLs were correctly mapped to `https://github.com/JStaRFilms/CreativeOSFolder` following the user feedback.

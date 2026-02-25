@@ -8,6 +8,8 @@
 !/USER MANUAL.md
 !/install_cos.py
 !/.gitignore
+!/requirements.txt
+!/pyproject.toml
 
 # --- GLOBAL WRAPPERS (Ignore these everywhere, even in allowed folders) ---
 .DS_Store

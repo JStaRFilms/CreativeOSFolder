@@ -1,0 +1,2 @@
+[console_scripts]
+cos = cos.cli:main

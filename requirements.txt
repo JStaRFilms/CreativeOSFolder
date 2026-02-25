@@ -1,0 +1,9 @@
+# CreativeOS Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+rich>=13.0.0,<14.0.0
+
+# Note: tqdm is mentioned in documentation but not actually used in the codebase.
+# If you plan to use progress bars in the future, uncomment the line below:
+# tqdm>=4.65.0

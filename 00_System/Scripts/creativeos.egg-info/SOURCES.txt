@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+00_System/Scripts/creativeos.egg-info/PKG-INFO
+00_System/Scripts/creativeos.egg-info/SOURCES.txt
+00_System/Scripts/creativeos.egg-info/dependency_links.txt
+00_System/Scripts/creativeos.egg-info/entry_points.txt
+00_System/Scripts/creativeos.egg-info/requires.txt
+00_System/Scripts/creativeos.egg-info/top_level.txt
+00_System/Scripts/creativeos.egg-info/SOURCES.txt
