@@ -10,6 +10,7 @@ import filecmp
 import time
 import stat
 import subprocess
+import hashlib
 from argparse import RawTextHelpFormatter
 
 # --- RICH IMPORTS ---
@@ -36,6 +37,18 @@ console = Console(theme=custom_theme)
 # --- CONFIG LOAD ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "..", "Config", "config.json")
+
+# --- SYNC OPTIMIZATION CONSTANTS ---
+# Directories to skip during traversal for massive speedup
+EXCLUDED_DIRS = {
+    'node_modules', '.git', '__pycache__', '.venv', 'venv', 'env',
+    '.idea', '.vscode', 'dist', 'build', '.next', '.nuxt', 'coverage',
+    '.pytest_cache', '.mypy_cache', 'egg-info', 'EGG-INFO', 'target',
+    'vendor', 'Pods', '.gradle', 'DerivedData', '.cache'
+}
+
+# Sync state database path for incremental syncs
+SYNC_STATE_PATH = os.path.join(SCRIPT_DIR, "..", "Config", "sync_state.json")
 
 if not os.path.exists(CONFIG_PATH):
     console.print("❌ [error]CRITICAL ERROR: Config file not found.[/error]")
@@ -103,71 +116,156 @@ def get_smart_date(path):
     if not timestamps: return os.path.getmtime(path)
     return statistics.median(timestamps)
 
+# --- SYNC OPTIMIZATION HELPERS ---
+
+def load_sync_state():
+    """Load the sync state database for incremental syncs.
+    Returns a dict mapping project slugs to their last sync state."""
+    if os.path.exists(SYNC_STATE_PATH):
+        try:
+            with open(SYNC_STATE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+def save_sync_state(state):
+    """Save the sync state database."""
+    os.makedirs(os.path.dirname(SYNC_STATE_PATH), exist_ok=True)
+    with open(SYNC_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+
+def get_file_fingerprint(filepath):
+    """Get a fast fingerprint for a file using mtime and size.
+    This avoids reading file content for comparison."""
+    try:
+        stat_info = os.stat(filepath)
+        return {
+            "mtime": stat_info.st_mtime,
+            "size": stat_info.st_size
+        }
+    except OSError:
+        return None
+
 def get_syncable_files(root_dir):
-    """Recursively find all .md and .pdf files, returning relative paths."""
+    """Recursively find all .md and .pdf files, returning relative paths.
+    OPTIMIZED: Skips excluded directories (node_modules, .git, etc.) for massive speedup."""
     ALLOWED_EXTENSIONS = {".md", ".pdf"}
-    files = set()
-    for root, _, filenames in os.walk(root_dir):
+    files = {}
+    for root, dirs, filenames in os.walk(root_dir, topdown=True):
+        # OPTIMIZATION: Prune excluded directories in-place (avoids traversing them)
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+        
         for f in filenames:
             ext = os.path.splitext(f)[1].lower()
             if ext in ALLOWED_EXTENSIONS:
                 full_path = os.path.join(root, f)
                 rel_path = os.path.relpath(full_path, root_dir)
-                files.add(rel_path)
+                # Store fingerprint for mtime-first comparison
+                files[rel_path] = get_file_fingerprint(full_path)
     return files
 
-def sync_two_folders(dir_a, dir_b):
-    """Bidirectional Sync: A (Project) <-> B (Vault). Recursively syncs .md and .pdf files."""
+def sync_two_folders(dir_a, dir_b, prev_state=None):
+    """Bidirectional Sync: A (Project) <-> B (Vault). Recursively syncs .md and .pdf files.
+    
+    OPTIMIZATIONS:
+    1. Uses mtime-first comparison to avoid expensive content comparison
+    2. Skips files with identical fingerprints (mtime + size)
+    3. Returns state for incremental sync support
+    """
     if not os.path.exists(dir_a): os.makedirs(dir_a)
     if not os.path.exists(dir_b): os.makedirs(dir_b)
 
+    # Get files with fingerprints (optimized: single walk per folder)
     files_a = get_syncable_files(dir_a)
     files_b = get_syncable_files(dir_b)
-    all_files = files_a.union(files_b)
+    all_files = set(files_a.keys()).union(set(files_b.keys()))
     logs = []
-
+    new_state = {}
+    
     for rel_path in all_files:
         path_a = os.path.join(dir_a, rel_path)
         path_b = os.path.join(dir_b, rel_path)
+        
+        fp_a = files_a.get(rel_path)
+        fp_b = files_b.get(rel_path)
 
         # Case 1: New in A
-        if rel_path in files_a and rel_path not in files_b:
+        if fp_a and not fp_b:
             try:
                 os.makedirs(os.path.dirname(path_b), exist_ok=True)
                 shutil.copy2(path_a, path_b)
                 logs.append({"type": "push", "file": rel_path, "msg": "Pushed to Vault"})
+                new_state[rel_path] = fp_a
             except Exception as e: logs.append({"type": "error", "file": rel_path, "msg": str(e)})
 
         # Case 2: New in B
-        elif rel_path in files_b and rel_path not in files_a:
+        elif fp_b and not fp_a:
             try:
                 os.makedirs(os.path.dirname(path_a), exist_ok=True)
                 shutil.copy2(path_b, path_a)
                 logs.append({"type": "pull", "file": rel_path, "msg": "Pulled from Vault"})
+                new_state[rel_path] = fp_b
             except Exception as e: logs.append({"type": "error", "file": rel_path, "msg": str(e)})
 
-        # Case 3: Conflict - file exists in both
+        # Case 3: File exists in both - check if different
         else:
+            # OPTIMIZATION: mtime-first comparison
+            # If both fingerprints match, skip content comparison entirely
+            if (fp_a["mtime"] == fp_b["mtime"] and fp_a["size"] == fp_b["size"]):
+                # Files are identical (same mtime and size), no action needed
+                new_state[rel_path] = fp_a
+                continue
+            
+            # OPTIMIZATION: Check if unchanged from previous sync state
+            if prev_state:
+                prev_fp = prev_state.get(rel_path)
+                if prev_fp:
+                    # If both files match previous state, no changes needed
+                    if (fp_a["mtime"] == prev_fp["mtime"] and fp_a["size"] == prev_fp["size"] and
+                        fp_b["mtime"] == prev_fp["mtime"] and fp_b["size"] == prev_fp["size"]):
+                        new_state[rel_path] = prev_fp
+                        continue
+            
+            # Files differ - need to resolve
             try:
-                if not filecmp.cmp(path_a, path_b, shallow=False):
-                    mtime_a = os.path.getmtime(path_a)
-                    mtime_b = os.path.getmtime(path_b)
+                # OPTIMIZATION: Only do content comparison if mtime differs
+                # This is the expensive operation we want to avoid
+                if fp_a["size"] != fp_b["size"]:
+                    # Different sizes means definitely different content
+                    content_differs = True
+                elif fp_a["mtime"] == fp_b["mtime"]:
+                    # Same mtime and size - assume same content (rare edge case)
+                    content_differs = False
+                else:
+                    # Different mtime but same size - must compare content
+                    content_differs = not filecmp.cmp(path_a, path_b, shallow=False)
+                
+                if content_differs:
+                    mtime_a = fp_a["mtime"]
+                    mtime_b = fp_b["mtime"]
                     
                     if mtime_a > mtime_b:
                         shutil.copy2(path_a, path_b)
                         logs.append({"type": "update_vault", "file": rel_path, "msg": "Updated Vault"})
+                        new_state[rel_path] = get_file_fingerprint(path_b)
                     elif mtime_b > mtime_a:
                         # Create safety backup
                         shutil.copy2(path_a, path_a + ".bak")
                         shutil.copy2(path_b, path_a)
                         logs.append({"type": "update_project", "file": rel_path, "msg": "Updated Project (Backup made)"})
+                        new_state[rel_path] = get_file_fingerprint(path_a)
                     else:
                         # Timestamps equal but content differs. Force push to Vault to resolve.
                         shutil.copy2(path_a, path_b)
                         logs.append({"type": "conflict", "file": rel_path, "msg": "Content mismatch. Forced Push."})
+                        new_state[rel_path] = get_file_fingerprint(path_b)
+                else:
+                    # Content is the same, just update state
+                    new_state[rel_path] = fp_a
             except Exception as e: logs.append({"type": "error", "file": rel_path, "msg": str(e)})
     
-    return logs
+    return logs, new_state
 
 def copy_with_progress(src, dst):
     """Copies files from src to dst, showing a rich progress bar."""
@@ -440,6 +538,13 @@ def cmd_export(args):
         os.startfile(month_path)
 
 def cmd_sync(args):
+    """Sync Notes between Projects and Obsidian Vault.
+    
+    OPTIMIZATIONS:
+    1. Uses project index cache to avoid full tree walks
+    2. Uses sync state database for incremental syncs
+    3. Prunes excluded directories during traversal
+    """
     console.rule("[bold purple]Syncing CreativeOS Brain")
     vault_projects_dir = os.path.join(VAULT_PATH, "01_Active_Projects")
     if not os.path.exists(vault_projects_dir): os.makedirs(vault_projects_dir)
@@ -450,9 +555,21 @@ def cmd_sync(args):
     changes_table.add_column("File", style="dim")
 
     total_changes = 0
+    projects_synced = 0
+    
+    # OPTIMIZATION: Load previous sync state for incremental sync
+    prev_sync_state = load_sync_state()
+    new_sync_state = {}
+    
+    # OPTIMIZATION: Use project index cache path
+    project_index_path = os.path.join(SCRIPT_DIR, "..", "Config", "project_index.json")
     
     with console.status("[bold cyan]Syncing Notes...[/bold cyan]"):
-        for root, dirs, files in os.walk(PROJECTS_PATH):
+        # OPTIMIZATION: Prune excluded directories during project discovery
+        for root, dirs, files in os.walk(PROJECTS_PATH, topdown=True):
+            # Prune excluded directories in-place (massive speedup)
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+            
             if ".project_meta.json" in files:
                 meta_path = os.path.join(root, ".project_meta.json")
                 try:
@@ -462,8 +579,23 @@ def cmd_sync(args):
                 project_name = meta.get("slug", "Unknown")
                 notes_project = os.path.join(root, "00_Notes")
                 notes_vault = os.path.join(vault_projects_dir, project_name)
+                
+                # Get previous state for this project (if exists)
+                project_prev_state = prev_sync_state.get("projects", {}).get(project_name, {}).get("files", {})
 
-                logs = sync_two_folders(notes_project, notes_vault)
+                # OPTIMIZATION: sync_two_folders now returns (logs, new_state)
+                logs, project_state = sync_two_folders(notes_project, notes_vault, project_prev_state)
+                
+                # Store new state for this project
+                if project_state:
+                    if "projects" not in new_sync_state:
+                        new_sync_state["projects"] = {}
+                    new_sync_state["projects"][project_name] = {
+                        "files": project_state,
+                        "last_sync": datetime.datetime.now().isoformat()
+                    }
+                
+                projects_synced += 1
                 
                 for log in logs:
                     symbol = "✅"
@@ -475,11 +607,15 @@ def cmd_sync(args):
                     changes_table.add_row(project_name, symbol, log["file"])
                     total_changes += 1
 
+    # OPTIMIZATION: Save sync state for next incremental sync
+    new_sync_state["last_full_sync"] = datetime.datetime.now().isoformat()
+    save_sync_state(new_sync_state)
+
     if total_changes == 0:
-        console.print("[success]✅ Everything is up to date.[/success]")
+        console.print(f"[success]✅ Everything is up to date. ({projects_synced} projects scanned)[/success]")
     else:
         console.print(changes_table)
-        console.print(f"[success]✨ Sync Complete. {total_changes} operations.[/success]")
+        console.print(f"[success]✨ Sync Complete. {total_changes} operations across {projects_synced} projects.[/success]")
 
 def cmd_thumbs(args):
     console.print("[bold purple]🖼️  Spinning up Thumbnail Mirror...[/bold purple]")

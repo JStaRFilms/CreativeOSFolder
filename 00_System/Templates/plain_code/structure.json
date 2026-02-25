@@ -1,7 +1,13 @@
 {
-    "00_Notes": ["DevLog.md"],
+    "00_Notes": [
+        "DevLog.md"
+    ],
     "src": [],
-    "docs": ["Project_Requirements.md", "Coding_Guidelines.md", "prompt.md"],
+    "docs": [
+        "Project_Requirements.md",
+        "Coding_Guidelines.md",
+        "Builder_Prompt.md"
+    ],
     "docs/mockups": [],
     "docs/features": []
 }
