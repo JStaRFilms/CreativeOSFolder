@@ -223,15 +223,60 @@ def get_export_month_path():
     return full_path
 
 def find_meta_in_cwd():
+    """
+    Search upward from current directory for .project_meta.json.
+    
+    Performs a 3-level upward search for project metadata.
+    Validates that the metadata file is within expected bounds.
+    
+    Returns:
+        tuple: (metadata_dict, project_root) or (None, None) if not found
+    """
     current = os.getcwd()
+    
     for _ in range(3):
-        if ".project_meta.json" in os.listdir(current):
+        meta_path = os.path.join(current, ".project_meta.json")
+        
+        if os.path.exists(meta_path):
             try:
-                with open(os.path.join(current, ".project_meta.json"), "r", encoding="utf-8-sig") as f:
-                    return json.load(f), current
-            except: return None, None
-        current = os.path.dirname(current)
-        if len(current) < 4: break
+                with open(meta_path, "r", encoding="utf-8-sig") as f:
+                    meta = json.load(f)
+                
+                # Validate metadata structure
+                required_fields = {"name", "slug", "type", "created"}
+                if not required_fields.issubset(meta.keys()):
+                    console.print(f"[warning]⚠️  Found metadata but missing required fields: {meta_path}[/warning]")
+                    return None, None
+                
+                # Validate path is within PROJECTS_PATH
+                try:
+                    abs_current = os.path.realpath(current)
+                    abs_projects = os.path.realpath(PROJECTS_PATH)
+                    
+                    if not abs_current.startswith(abs_projects):
+                        console.print(f"[warning]⚠️  Found metadata outside projects path: {meta_path}[/warning]")
+                        return None, None
+                except Exception:
+                    pass  # If path validation fails, continue anyway
+                
+                return meta, current
+                
+            except json.JSONDecodeError as e:
+                console.print(f"[warning]⚠️  Invalid JSON in metadata: {meta_path}[/warning]")
+                return None, None
+            except IOError as e:
+                console.print(f"[warning]⚠️  Cannot read metadata: {e}[/warning]")
+                return None, None
+        
+        # Move up one directory
+        parent = os.path.dirname(current)
+        
+        # Check if we've reached the root (cross-platform)
+        if parent == current:
+            break
+            
+        current = parent
+    
     return None, None
 
 def get_smart_date(path):
