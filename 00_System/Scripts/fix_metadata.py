@@ -13,6 +13,8 @@
 
 
 
+import base64
+
 import os
 
 
@@ -69,214 +71,62 @@ from datetime import datetime
 
 
 
-def set_file_times(file_path, new_date):
-
-
-
-
-
-
-
+def escape_ps_string(s: str) -> str:
     """
+    Escape a string for safe use in PowerShell single-quoted strings.
+    
+    In PowerShell single-quoted strings, only single quotes need escaping
+    (by doubling them).
+    
+    Args:
+        s: The string to escape
+    
+    Returns:
+        The escaped string wrapped in single quotes
+    """
+    # Escape single quotes by doubling them
+    escaped = s.replace("'", "''")
+    return f"'{escaped}'"
 
-
-
-
-
-
-
+def set_file_times(file_path: str, new_date) -> None:
+    """
     Sets the creation and modification time of a file using PowerShell.
-
-
-
-
-
-
-
-    This is necessary for changing the creation time on Windows.
-
-
-
-
-
-
-
+    
+    Uses Base64-encoded command to prevent injection attacks.
+    
+    Args:
+        file_path: Path to the file to modify
+        new_date: The new timestamp (datetime object)
+    
+    Raises:
+        subprocess.CalledProcessError: If PowerShell command fails
+        Exception: For other errors
     """
-
-
-
-
-
-
-
     try:
-
-
-
-
-
-
-
         # Format for PowerShell: 'YYYY-MM-DD HH:MM:SS'
-
-
-
-
-
-
-
         date_str = new_date.strftime('%Y-%m-%d %H:%M:%S')
-
-
-
-
-
-
-
         
-
-
-
-
-
-
-
-        # PowerShell commands to set creation and last write time
-
-
-
-
-
-
-
-        ps_command = (
-
-
-
-
-
-
-
-            f'$item = Get-Item -LiteralPath "{file_path}"; '
-
-
-
-
-
-
-
-            f'$item.CreationTime = Get-Date "{date_str}"; '
-
-
-
-
-
-
-
-            f'$item.LastWriteTime = Get-Date "{date_str}";'
-
-
-
-
-
-
-
-        )
-
-
-
-
-
-
-
+        # Build the PowerShell script using -LiteralPath for safety
+        ps_script = f'''
+$file = Get-Item -LiteralPath {escape_ps_string(file_path)}
+$file.CreationTime = Get-Date '{date_str}'
+$file.LastWriteTime = Get-Date '{date_str}'
+'''
         
-
-
-
-
-
-
-
-        # Execute the command
-
-
-
-
-
-
-
+        # Encode the script to avoid encoding issues and injection
+        encoded_script = base64.b64encode(ps_script.encode('utf-16-le')).decode('ascii')
+        
+        # Execute with encoded command
         subprocess.run(
-
-
-
-
-
-
-
-            ["powershell", "-NoProfile", "-Command", ps_command],
-
-
-
-
-
-
-
+            ["powershell", "-NoProfile", "-EncodedCommand", encoded_script],
             check=True,
-
-
-
-
-
-
-
             capture_output=True,
-
-
-
-
-
-
-
             text=True
-
-
-
-
-
-
-
         )
-
-
-
-
-
-
-
+        
     except subprocess.CalledProcessError as e:
-
-
-
-
-
-
-
         print(f"Error updating metadata for {os.path.basename(file_path)}: {e.stderr}")
-
-
-
-
-
-
-
     except Exception as e:
-
-
-
-
-
-
-
         print(f"An unexpected error occurred: {e}")
 
 
