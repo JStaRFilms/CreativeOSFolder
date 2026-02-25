@@ -11,7 +11,136 @@ import time
 import stat
 import subprocess
 import hashlib
+import re
 from argparse import RawTextHelpFormatter
+from urllib.parse import urlparse
+
+def sanitize_path_input(value: str, max_length: int = 100) -> str:
+    """
+    Sanitize user input to prevent path traversal attacks.
+    
+    Removes or Rejects:
+    - Path separators (/, \)
+    - Parent directory references (..)
+    - Special characters that could be used for injection
+    - Windows reserved names
+    
+    Args:
+        value: The input string to sanitize
+        max_length: Maximum allowed length (default 100)
+    
+    Returns:
+        Sanitized string safe for use in paths
+    
+    Raises:
+        ValueError: If input contains invalid characters or is empty
+    """
+    if not value:
+        raise ValueError("Input cannot be empty")
+        
+    if re.search(r'[<>:"/\\|?*]', value) or '..' in value:
+        raise ValueError(f"Input '{value}' contains invalid characters")
+    
+    # Windows reserved names
+    reserved_names = {
+        'CON', 'PRN', 'AUX', 'NUL',
+        'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+        'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+    }
+    
+    # Remove null bytes and control characters
+    sanitized = re.sub(r'[\x00-\x1f\x7f]', '', value)
+    
+    # Remove leading dots that could be path traversal
+    sanitized = re.sub(r'^\.+', '', sanitized)
+    
+    # Collapse multiple spaces into one
+    sanitized = re.sub(r'\s+', ' ', sanitized)
+    
+    # Trim whitespace
+    sanitized = sanitized.strip()
+    
+    # Check for reserved names
+    base_name = sanitized.upper().split('.')[0] if '.' in sanitized else sanitized.upper()
+    if base_name in reserved_names:
+        raise ValueError(f"'{value}' is a reserved name and cannot be used")
+    
+    # Check length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
+    
+    if not sanitized:
+        raise ValueError(f"Input '{value}' contains only invalid characters")
+    
+    return sanitized
+
+def validate_git_url(url: str) -> str:
+    """
+    Validate and sanitize a Git repository URL.
+    
+    Accepts:
+    - HTTPS URLs: https://github.com/user/repo.git
+    - SSH URLs: git@github.com:user/repo.git
+    - Git protocol: git://github.com/user/repo.git
+    
+    Rejects:
+    - URLs starting with - (flag injection)
+    - File:// URLs (local file access)
+    - Invalid formats
+    
+    Args:
+        url: The Git URL to validate
+    
+    Returns:
+        The validated URL
+    
+    Raises:
+        ValueError: If URL is invalid or potentially malicious
+    """
+    if not url:
+        raise ValueError("Git URL cannot be empty")
+    
+    url = url.strip()
+    
+    # Reject URLs starting with dash (flag injection)
+    if url.startswith('-'):
+        raise ValueError("URL cannot start with '-' (potential flag injection)")
+    
+    # Reject file:// protocol (local file access)
+    if url.lower().startswith('file://'):
+        raise ValueError("file:// URLs are not allowed")
+    
+    # Validate HTTPS URLs
+    if url.startswith('https://') or url.startswith('http://'):
+        try:
+            parsed = urlparse(url)
+            if not parsed.netloc:
+                raise ValueError("Invalid URL: missing host")
+            return url
+        except Exception as e:
+            raise ValueError(f"Invalid URL format: {e}")
+    
+    # Validate SSH URLs (git@host:path)
+    if url.startswith('git@'):
+        if ':' not in url or '/' not in url:
+            raise ValueError("Invalid SSH URL format. Expected: git@host:path/repo.git")
+        return url
+    
+    # Validate git:// protocol
+    if url.startswith('git://'):
+        return url
+    
+    # If it looks like a simple path/repo, assume GitHub HTTPS
+    if re.match(r'^[\w-]+/[\w.-]+$', url):
+        return f"https://github.com/{url}"
+    
+    raise ValueError(
+        f"Unrecognized URL format: {url}\n"
+        "Supported formats:\n"
+        "  - https://github.com/user/repo.git\n"
+        "  - git@github.com:user/repo.git\n"
+        "  - git://github.com/user/repo.git"
+    )
 
 # --- RICH IMPORTS ---
 from rich.console import Console
@@ -340,7 +469,13 @@ def setup_git(project_path, category):
 # --- COMMANDS ---
 
 def cmd_new(args):
-    project_name = args.name
+    # Sanitize project name
+    try:
+        project_name = sanitize_path_input(args.name)
+    except ValueError as e:
+        console.print(f"[error]❌ Invalid project name: {e}[/error]")
+        return
+        
     category = args.category.title()
     date_prefix = get_date_slug(args.date)
     safe_name = project_name.replace(" ", "_")
@@ -351,10 +486,17 @@ def cmd_new(args):
     
     # Logic to determine root
     if args.client:
-        target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
+        # Sanitize client name
+        try:
+            sanitized_client = sanitize_path_input(args.client, max_length=50)
+        except ValueError as e:
+            console.print(f"[error]❌ Invalid client name: {e}[/error]")
+            return
+        
+        target_root = os.path.join(PROJECTS_PATH, "Clients", sanitized_client)
         if not os.path.exists(target_root):
             os.makedirs(target_root)
-            console.print(f"[success]✨ Created new Client folder: {args.client}[/success]")
+            console.print(f"[success]✨ Created new Client folder: {sanitized_client}[/success]")
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
@@ -655,14 +797,27 @@ def cmd_clone(args):
     """Clones a Git repo and adopts it into CreativeOS."""
     url = args.url
     
+    # Validate URL
+    try:
+        url = validate_git_url(url)
+    except ValueError as e:
+        console.print(f"[error]❌ {e}[/error]")
+        return
+        
     # 1. Determine Project Name from URL if not provided
     if not args.name:
         base_name = url.rstrip("/").split("/")[-1]
         if base_name.endswith(".git"):
             base_name = base_name[:-4]
-        project_name = base_name
+        project_name_raw = base_name
     else:
-        project_name = args.name
+        project_name_raw = args.name
+
+    try:
+        project_name = sanitize_path_input(project_name_raw)
+    except ValueError as e:
+        console.print(f"[error]❌ Invalid project name: {e}[/error]")
+        return
 
     category = args.category.title()
     if category == "Video" and not args.category_flag_passed:
@@ -675,10 +830,16 @@ def cmd_clone(args):
     # 3. Location Logic
     cwd = os.getcwd()
     if args.client:
-        target_root = os.path.join(PROJECTS_PATH, "Clients", args.client)
+        try:
+            sanitized_client = sanitize_path_input(args.client, max_length=50)
+        except ValueError as e:
+            console.print(f"[error]❌ Invalid client name: {e}[/error]")
+            return
+            
+        target_root = os.path.join(PROJECTS_PATH, "Clients", sanitized_client)
         if not os.path.exists(target_root):
             os.makedirs(target_root)
-            console.print(f"[success]✨ Created new Client folder: {args.client}[/success]")
+            console.print(f"[success]✨ Created new Client folder: {sanitized_client}[/success]")
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
@@ -703,7 +864,7 @@ def cmd_clone(args):
     # 4. Perform Git Clone
     try:
         with console.status("[bold cyan]Cloning...[/bold cyan]"):
-            subprocess.run(["git", "clone", url, target_dir], check=True)
+            subprocess.run(["git", "clone", "--", url, target_dir], check=True)
     except Exception as e:
         console.print(f"[error]❌ Git Clone failed: {e}[/error]")
         return
