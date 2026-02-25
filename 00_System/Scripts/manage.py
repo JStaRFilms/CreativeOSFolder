@@ -15,6 +15,10 @@ import re
 from argparse import RawTextHelpFormatter
 from urllib.parse import urlparse
 
+# File permissions
+CONFIG_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # 0o600 - owner read/write only
+DIR_PERMISSIONS = stat.S_IRWXU | stat.S_IRWXG | stat.S_IROTH | stat.S_IXOTH  # 0o750
+
 def sanitize_path_input(value: str, max_length: int = 100) -> str:
     """
     Sanitize user input to prevent path traversal attacks.
@@ -688,6 +692,13 @@ tags: [creativeos]
         }
         with open(os.path.join(target_dir, ".project_meta.json"), "w") as f:
             json.dump(meta, f, indent=4)
+            
+        # Set restrictive permissions on metadata file
+        meta_path = os.path.join(target_dir, ".project_meta.json")
+        try:
+            os.chmod(meta_path, CONFIG_PERMISSIONS)
+        except OSError:
+            pass  # Windows may not support Unix permissions
     
     # Git Setup (outside spinner context so prompts are visible)
     if args.git:
@@ -765,6 +776,13 @@ tags: [creativeos]
     }
     with open(os.path.join(cwd, ".project_meta.json"), "w") as f:
         json.dump(meta, f, indent=4)
+        
+    # Set restrictive permissions on metadata file
+    meta_path = os.path.join(cwd, ".project_meta.json")
+    try:
+        os.chmod(meta_path, CONFIG_PERMISSIONS)
+    except OSError:
+        pass  # Windows may not support Unix permissions
         
     console.print(Panel(f"Project adopted! Slug: [bold]{slug}[/bold]", style="success"))
 
@@ -996,6 +1014,13 @@ def cmd_clone(args):
     }
     with open(os.path.join(target_dir, ".project_meta.json"), "w") as f:
         json.dump(meta, f, indent=4)
+
+    # Set restrictive permissions on metadata file
+    meta_path = os.path.join(target_dir, ".project_meta.json")
+    try:
+        os.chmod(meta_path, CONFIG_PERMISSIONS)
+    except OSError:
+        pass  # Windows may not support Unix permissions
 
     console.print(Panel(f"Clone Complete!\n{format_path(target_dir)}", style="success"))
 

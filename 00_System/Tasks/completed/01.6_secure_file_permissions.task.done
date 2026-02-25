@@ -1,0 +1,22 @@
+# Task Completion Summary
+
+**Task:** 01.6_secure_file_permissions.task.md
+**Completed At:** 2026-02-25T12:44:00+01:00
+**Mode:** Code
+
+## Results
+
+Added explicitly restrictive permissions on `.project_meta.json` when it is created or updated. Integrated `os.chmod` calls wrapped in `try...except OSError` to ensure Windows OS doesn't throw errors when restricting paths. The changes were applied to `manage.py` in the `cmd_new`, `cmd_init` and `cmd_clone` logic.
+
+## Files Created/Modified
+
+- `00_System/Scripts/manage.py`
+
+## Verification Status
+
+- [x] Tested command execution successfully on Windows OS without crashes
+- [x] Permissions set logic verified within codebase
+
+## Notes
+
+None.
