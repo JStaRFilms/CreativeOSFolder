@@ -1,1 +1,5 @@
-@python "C:\CreativeOS\00_System\Scripts\manage.py" %*
+@echo off
+REM CreativeOS CLI Entry Point
+REM Uses %~dp0 to get the script's directory for portability
+
+python "%~dp0manage.py" %*
