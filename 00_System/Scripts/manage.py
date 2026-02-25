@@ -14,6 +14,13 @@ import hashlib
 import re
 from argparse import RawTextHelpFormatter
 from urllib.parse import urlparse
+from typing import Optional, Dict, List, Tuple, Any, Union
+from pathlib import Path
+
+# Type aliases
+JSONDict = Dict[str, Any]
+FileFingerprint = Dict[str, Union[float, int]]
+SyncState = Dict[str, Any]
 
 # File permissions
 CONFIG_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # 0o600 - owner read/write only
@@ -258,7 +265,7 @@ ARCHIVE_PATH = CONFIG.get("archive_path", "D:\\OneDrive - Developer\\Archive")
 
 # --- HELPERS ---
 
-def get_date_slug(override_date: str = None) -> str:
+def get_date_slug(override_date: Optional[str] = None) -> str:
     """
     Generate a date slug for project naming.
     
@@ -272,27 +279,27 @@ def get_date_slug(override_date: str = None) -> str:
         return override_date
     return datetime.datetime.now().strftime("%Y-%m-%d")
 
-def format_path(path):
+def format_path(path: str) -> str:
     """Returns a clickable rich string for the given path."""
     try:
-        abs_path = os.path.abspath(path)
-        url = urllib.request.pathname2url(abs_path)
+        abs_path: str = os.path.abspath(path)
+        url: str = urllib.request.pathname2url(abs_path)
         return f"[link=file:{url}][path]{path}[/path][/link]"
-    except:
+    except Exception:
         return f"[path]{path}[/path]"
 
 
-def get_export_month_path():
+def get_export_month_path() -> str:
     now = datetime.datetime.now()
-    year = now.strftime("%Y")
-    month_name = now.strftime("%B")
-    month_num = now.strftime("%m")
+    year: str = now.strftime("%Y")
+    month_name: str = now.strftime("%B")
+    month_num: str = now.strftime("%m")
     
-    full_path = os.path.join(EXPORTS_PATH, year, f"{month_num} - {month_name}")
+    full_path: str = os.path.join(EXPORTS_PATH, year, f"{month_num} - {month_name}")
     if not os.path.exists(full_path): os.makedirs(full_path)
     return full_path
 
-def find_meta_in_cwd():
+def find_meta_in_cwd() -> Tuple[Optional[JSONDict], Optional[str]]:
     """
     Search upward from current directory for .project_meta.json.
     
@@ -384,7 +391,7 @@ def get_smart_date(path: str) -> float:
 
 # --- SYNC OPTIMIZATION HELPERS ---
 
-def load_sync_state():
+def load_sync_state() -> SyncState:
     """Load the sync state database for incremental syncs.
     Returns a dict mapping project slugs to their last sync state."""
     if os.path.exists(SYNC_STATE_PATH):
@@ -395,13 +402,13 @@ def load_sync_state():
             return {}
     return {}
 
-def save_sync_state(state):
+def save_sync_state(state: SyncState) -> None:
     """Save the sync state database."""
     os.makedirs(os.path.dirname(SYNC_STATE_PATH), exist_ok=True)
     with open(SYNC_STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
 
-def get_file_fingerprint(filepath):
+def get_file_fingerprint(filepath: str) -> Optional[FileFingerprint]:
     """Get a fast fingerprint for a file using mtime and size.
     This avoids reading file content for comparison."""
     try:
@@ -413,7 +420,7 @@ def get_file_fingerprint(filepath):
     except OSError:
         return None
 
-def get_syncable_files(root_dir):
+def get_syncable_files(root_dir: str) -> Dict[str, Optional[FileFingerprint]]:
     """Recursively find all .md and .pdf files, returning relative paths.
     OPTIMIZED: Skips excluded directories (node_modules, .git, etc.) for massive speedup."""
     ALLOWED_EXTENSIONS = {".md", ".pdf"}
@@ -431,7 +438,7 @@ def get_syncable_files(root_dir):
                 files[rel_path] = get_file_fingerprint(full_path)
     return files
 
-def sync_two_folders(dir_a, dir_b, prev_state=None):
+def sync_two_folders(dir_a: str, dir_b: str, prev_state: Optional[SyncState] = None) -> Tuple[List[Dict[str, str]], SyncState]:
     """Bidirectional Sync: A (Project) <-> B (Vault). Recursively syncs .md and .pdf files.
     
     OPTIMIZATIONS:
@@ -533,7 +540,7 @@ def sync_two_folders(dir_a, dir_b, prev_state=None):
     
     return logs, new_state
 
-def copy_with_progress(src, dst):
+def copy_with_progress(src: str, dst: str) -> None:
     """Copies files from src to dst, showing a rich progress bar."""
     os.makedirs(dst, exist_ok=True)
     
@@ -560,7 +567,7 @@ def copy_with_progress(src, dst):
             shutil.copy2(f, dest_file_path)
             progress.advance(task)
 
-def setup_git(project_path, category):
+def setup_git(project_path: str, category: str) -> None:
     """Initializes Git and adds .gitignore."""
     console.print("   [info]🔧 Initializing Git Repository...[/info]")
     
@@ -605,7 +612,7 @@ def setup_git(project_path, category):
 
 # --- COMMANDS ---
 
-def cmd_new(args):
+def cmd_new(args: argparse.Namespace) -> None:
     # Sanitize project name
     try:
         project_name = sanitize_path_input(args.name)
@@ -737,7 +744,7 @@ tags: [creativeos]
     
     console.print(Panel(f"Project successfully spawned at:\n{format_path(target_dir)}", style="bold green", title="✅ Success"))
 
-def cmd_init(args):
+def cmd_init(args: argparse.Namespace) -> None:
     cwd = os.getcwd()
     if not cwd.startswith(PROJECTS_PATH):
         console.print("[warning]⚠️  Not in CreativeOS Projects folder.[/warning]")
@@ -817,7 +824,7 @@ tags: [creativeos]
         
     console.print(Panel(f"Project adopted! Slug: [bold]{slug}[/bold]", style="success"))
 
-def cmd_export(args):
+def cmd_export(args: argparse.Namespace) -> None:
     month_path = get_export_month_path()
     meta, project_root = find_meta_in_cwd()
     
@@ -830,7 +837,7 @@ def cmd_export(args):
         console.print(f"📂 Opening Month Export: {format_path(month_path)}")
         os.startfile(month_path)
 
-def cmd_sync(args):
+def cmd_sync(args: argparse.Namespace) -> None:
     """Sync Notes between Projects and Obsidian Vault.
     
     OPTIMIZATIONS:
@@ -910,7 +917,7 @@ def cmd_sync(args):
         console.print(changes_table)
         console.print(f"[success]✨ Sync Complete. {total_changes} operations across {projects_synced} projects.[/success]")
 
-def cmd_thumbs(args):
+def cmd_thumbs(args: argparse.Namespace) -> None:
     console.print("[bold purple]🖼️  Spinning up Thumbnail Mirror...[/bold purple]")
     gallery_root = os.path.join(ROOT_PATH, "04_Global_Assets", "Thumbnails_Mirror")
     if not os.path.exists(gallery_root): os.makedirs(gallery_root)
@@ -944,7 +951,7 @@ def cmd_thumbs(args):
     console.print(f"[success]✨ Gallery Updated. {count} new thumbnails.[/success]")
     os.startfile(gallery_root)
 
-def cmd_clone(args):
+def cmd_clone(args: argparse.Namespace) -> None:
     """Clones a Git repo and adopts it into CreativeOS."""
     url = args.url
     
@@ -1055,7 +1062,7 @@ def cmd_clone(args):
 
     console.print(Panel(f"Clone Complete!\n{format_path(target_dir)}", style="success"))
 
-def cmd_clean(args):
+def cmd_clean(args: argparse.Namespace) -> None:
     target_path = args.target if args.target else DOWNLOADS_PATH
 
     console.print(f"[bold cyan]🧹 Cleaning: {format_path(target_path)}...[/bold cyan]")
@@ -1115,7 +1122,7 @@ def cmd_clean(args):
 
     os.startfile(target_path)
 
-def cmd_sort_exports(args):
+def cmd_sort_exports(args: argparse.Namespace) -> None:
     inbox_path = os.path.join(EXPORTS_PATH, "_Inbox")
     if not os.path.exists(inbox_path):
         os.makedirs(inbox_path)
@@ -1158,7 +1165,7 @@ def cmd_sort_exports(args):
     
     console.print(f"[success]✨ Sorted {count} items.[/success]")
 
-def cmd_travel(args):
+def cmd_travel(args: argparse.Namespace) -> None:
     """Copies the current project to the External Shuttle Drive."""
     meta, project_root = find_meta_in_cwd()
     
@@ -1195,11 +1202,11 @@ def cmd_travel(args):
     except Exception as e:
         console.print(f"[error]❌ Copy failed: {e}[/error]")
 
-def remove_readonly(func, path, excinfo):
+def remove_readonly(func: Any, path: str, excinfo: Any) -> None:
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
-def robust_rmtree(path, retries=5, delay=1):
+def robust_rmtree(path: str, retries: int = 5, delay: int = 1) -> bool:
     for i in range(retries):
         try:
             shutil.rmtree(path, onerror=remove_readonly)
@@ -1210,7 +1217,7 @@ def robust_rmtree(path, retries=5, delay=1):
     console.print(f"[error]❌ Failed to remove directory after {retries} retries: {path}[/error]")
     return False
 
-def cmd_resurrect(args):
+def cmd_resurrect(args: argparse.Namespace) -> None:
     """Brings a project back from the dead (Archive -> Active)."""
     search_term = args.name.lower()
     console.print(f"🔎 Searching Archive for: '[cyan]{args.name}[/cyan]'...")
@@ -1289,7 +1296,7 @@ def cmd_resurrect(args):
 
 # --- MAIN ---
 
-def main():
+def main() -> None:
     banner = """
     ______                _   _            ___  ____
    / ____/________  ____ | | | |__   ___  / _ \/ ___|
