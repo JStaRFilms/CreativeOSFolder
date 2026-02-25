@@ -142,6 +142,63 @@ def validate_git_url(url: str) -> str:
         "  - git://github.com/user/repo.git"
     )
 
+def validate_project_name(value: str) -> str:
+    """
+    Argparse validator for project names.
+    
+    Args:
+        value: Raw input string
+    
+    Returns:
+        Sanitized project name
+    
+    Raises:
+        argparse.ArgumentTypeError: If input is invalid
+    """
+    try:
+        return sanitize_path_input(value, max_length=100)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+def validate_client_name(value: str) -> str:
+    """
+    Argparse validator for client names.
+    
+    Args:
+        value: Raw input string
+    
+    Returns:
+        Sanitized client name
+    
+    Raises:
+        argparse.ArgumentTypeError: If input is invalid
+    """
+    try:
+        return sanitize_path_input(value, max_length=50)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+def validate_date(value: str) -> str:
+    """
+    Argparse validator for date strings.
+    
+    Args:
+        value: Raw input string
+    
+    Returns:
+        Validated date string
+    
+    Raises:
+        argparse.ArgumentTypeError: If date format is invalid
+    """
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%d")
+        return value
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Invalid date format: '{value}'. Use YYYY-MM-DD format."
+        )
+
 # --- RICH IMPORTS ---
 from rich.console import Console
 from rich.panel import Panel
@@ -1217,20 +1274,35 @@ def main():
 
     # --- NEW ---
     p_new = subparsers.add_parser("new", help="Spawn a new project")
-    p_new.add_argument("name", type=str)
-    p_new.add_argument("-c", "--category", type=str, default="Video")
+    p_new.add_argument(
+        "name", 
+        type=validate_project_name,
+        help="Project name (alphanumeric, spaces, hyphens, underscores)"
+    )
+    p_new.add_argument(
+        "-c", "--category", 
+        type=str, 
+        default="Video",
+        choices=["Video", "Code", "Web", "AI", "Music", "Audio"],
+        help="Project category"
+    )
     p_new.add_argument("-s", "--simple", action="store_true")
-    p_new.add_argument("-d", "--date", type=str)
-    p_new.add_argument("--client", type=str)
+    p_new.add_argument("-d", "--date", type=validate_date)
+    p_new.add_argument("--client", type=validate_client_name)
     p_new.add_argument("-g", "--git", action="store_true")
 
     # --- CLONE ---
     p_clone = subparsers.add_parser("clone", help="Clone a repo into CreativeOS")
-    p_clone.add_argument("url", type=str)
-    p_clone.add_argument("-n", "--name", type=str)
-    p_clone.add_argument("-c", "--category", type=str, default="Video")
-    p_clone.add_argument("-d", "--date", type=str)
-    p_clone.add_argument("--client", type=str)
+    p_clone.add_argument("url", type=str, help="Git repository URL")
+    p_clone.add_argument("-n", "--name", type=validate_project_name)
+    p_clone.add_argument(
+        "-c", "--category", 
+        type=str, 
+        default="Video",
+        choices=["Video", "Code", "Web", "AI", "Music", "Audio"]
+    )
+    p_clone.add_argument("-d", "--date", type=validate_date)
+    p_clone.add_argument("--client", type=validate_client_name)
 
     # --- INIT ---
     subparsers.add_parser("init", help="Adopt current folder")
