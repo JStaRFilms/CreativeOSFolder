@@ -3,6 +3,7 @@ import urllib.request
 import json
 import argparse
 import datetime
+import traceback
 import sys
 import shutil
 import statistics
@@ -640,6 +641,46 @@ def setup_git(project_path: str, category: str) -> None:
             console.print(f"   [error]❌ Initial commit failed: {e}[/error]")
     else:
         console.print("   [dim]Skipped initial commit. You can commit manually later.[/dim]")
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """
+    Custom exception handler for beautiful error display via Rich.
+    
+    Displays a user-friendly error panel and logs the full traceback
+    to a file for debugging.
+    
+    Args:
+        exc_type: Exception type
+        exc_value: Exception value
+        exc_traceback: Exception traceback
+    """
+    # Handle keyboard interrupt gracefully
+    if issubclass(exc_type, KeyboardInterrupt):
+        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
+        sys.exit(1)
+    
+    # Display user-friendly error panel
+    console.print(Panel(
+        f"[bold red]An unexpected error occurred:[/bold red]\n\n"
+        f"[dim]{exc_type.__name__}:[/dim] {exc_value}\n\n"
+        f"[dim]Full error logged to: 00_System/Config/error.log[/dim]",
+        title=" Error ",
+        border_style="red"
+    ))
+    
+    # Log full traceback to file
+    log_path = os.path.join(SCRIPT_DIR, "..", "Config", "error.log")
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*50}\n")
+            f.write(f"Time: {datetime.datetime.now().isoformat()}\n")
+            f.write(f"Command: {' '.join(sys.argv)}\n")
+            f.write(f"Working Dir: {os.getcwd()}\n\n")
+            traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+    except Exception:
+        pass  # If logging fails, don't crash
+    
+    sys.exit(1)
 
 # --- COMMANDS ---
 
@@ -1497,6 +1538,9 @@ def main() -> None:
         - Exits system if help logic determines so (`sys.exit(0)`).
         - Calls functions that may run subprocesses or generate files.
     """
+    # Set custom exception handler
+    sys.excepthook = handle_exception
+    
     banner = """
     ______                _   _            ___  ____
    / ____/________  ____ | | | |__   ___  / _ \/ ___|
