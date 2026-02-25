@@ -258,9 +258,18 @@ ARCHIVE_PATH = CONFIG.get("archive_path", "D:\\OneDrive - Developer\\Archive")
 
 # --- HELPERS ---
 
-def get_date_slug(override_date=None):
-    if override_date: return override_date
-    if override_date: return override_date
+def get_date_slug(override_date: str = None) -> str:
+    """
+    Generate a date slug for project naming.
+    
+    Args:
+        override_date: Optional date string in YYYY-MM-DD format
+    
+    Returns:
+        Date string in YYYY-MM-DD format
+    """
+    if override_date:
+        return override_date
     return datetime.datetime.now().strftime("%Y-%m-%d")
 
 def format_path(path):
