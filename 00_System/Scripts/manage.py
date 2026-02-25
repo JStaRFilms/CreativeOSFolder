@@ -340,15 +340,37 @@ def find_meta_in_cwd():
     
     return None, None
 
-def get_smart_date(path):
-    if os.path.isfile(path): return os.path.getmtime(path)
+def get_smart_date(path: str) -> float:
+    """
+    Calculate the median timestamp of files in a directory.
+    
+    Uses smart pruning to skip heavy directories like node_modules, .git, etc.
+    
+    Args:
+        path: Path to file or directory
+    
+    Returns:
+        Median timestamp as float, or file mtime if single file
+    """
+    if os.path.isfile(path):
+        return os.path.getmtime(path)
+    
     timestamps = []
-    for root, _, files in os.walk(path):
+    
+    for root, dirs, files in os.walk(path, topdown=True):
+        # Prune excluded directories in-place (massive speedup)
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+        
         for file in files:
             if not file.startswith('.'):
-                try: timestamps.append(os.path.getmtime(os.path.join(root, file)))
-                except: pass
-    if not timestamps: return os.path.getmtime(path)
+                try:
+                    timestamps.append(os.path.getmtime(os.path.join(root, file)))
+                except (OSError, PermissionError):
+                    pass  # Skip files we can't access
+    
+    if not timestamps:
+        return os.path.getmtime(path)
+    
     return statistics.median(timestamps)
 
 # --- SYNC OPTIMIZATION HELPERS ---
