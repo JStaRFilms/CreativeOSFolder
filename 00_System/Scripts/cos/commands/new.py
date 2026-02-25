@@ -15,6 +15,47 @@ from ..security import sanitize_path_input, validate_project_name, validate_clie
 from ..git_utils import setup_git
 from ..file_utils import get_date_slug, format_path
 
+import datetime
+from pathlib import Path
+
+def _apply_template_variables(target_dir: str, name: str, category: str, client: str) -> None:
+    """Replace {{VARIABLE}} tokens in all .md files after template creation.
+    
+    Args:
+        target_dir: Path to the new project directory.
+        name: Project name.
+        category: Project category.
+        client: Client name.
+    """
+    replacements = {
+        "{{PROJECT_NAME}}": name,
+        "{{DATE}}": datetime.date.today().isoformat(),
+        "{{CLIENT}}": client or "N/A",
+        "{{TYPE}}": category,
+    }
+    
+    project_path = Path(target_dir)
+    for md_file in project_path.rglob("*.md"):
+        try:
+            content = md_file.read_text(encoding="utf-8")
+            changed = False
+            for token, value in replacements.items():
+                if token in content:
+                    content = content.replace(token, value)
+                    changed = True
+            if changed:
+                md_file.write_text(content, encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Could not apply variables to {md_file}: {e}")
+
+def validate_category(val: str) -> str:
+    """Normalize and validate category input to be case-insensitive."""
+    valid_choices = ["Video", "Code", "Web", "AI", "Music", "Audio", "Design", "Photo", "Writing", "Podcast", "Client", "Course"]
+    mapping = {c.lower(): c for c in valid_choices}
+    if val.lower() in mapping:
+        return mapping[val.lower()]
+    return val # Will be caught by argparse choices validation
+
 def add_parser(subparsers: Any) -> None:
     from ..help_formatter import RichHelpAction
 
@@ -41,11 +82,15 @@ Examples:
   cos new "Retro Cut" -d 2025-12-01      Create project backdated to 2025-12-01
 
 Templates:
-  Video  -> video_project   (00_Notes, 01_Footage, 02_Audio, 03_Exports, 04_Assets)
-  Code   -> plain_code      (00_Notes, 01_Source, 02_Build, 03_Docs)
-  Audio  -> audio_project   (00_Notes, 01_Recording, 02_Edits, 03_Exports)
-  AI     -> ai_project      (00_Notes, 01_Data, 02_Models, 03_Notebooks, 04_Exports)
-  Web    -> code_project    (00_Notes, 01_Source, 02_Public, 03_Config)\
+  Video    -> video_project   (00_Notes, 01_Footage, 02_Audio, 03_Exports, 99_Archive)
+  Design   -> design_project  (00_Notes, 01_Assets, 02_Working, 03_Exports, 04_Pres)
+  Writing  -> writing_project (00_Notes, 01_Drafts, 02_Edits, 03_Final, 05_Refs)
+  Photo    -> photo_project   (00_Notes, 01_RAW, 02_Selects, 03_Edits, 04_Exports)
+  Podcast  -> podcast_project (00_Notes, 01_Recordings, 02_Editing, 03_Assets)
+  Audio    -> audio_project   (00_Notes, 01_Project, 02_Stems, 03_Exports, 04_Samples)
+  Code     -> plain_code      (00_Notes, 01_Source, 02_Build, 03_Docs)
+  Course   -> course_project  (00_Notes, 01_Scripts, 02_Footage, 03_Assets, 04_Exports)
+  AI       -> ai_project      (00_Notes, 01_Data, 02_Models, 03_Notebooks, 04_Exports)\
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
@@ -57,10 +102,10 @@ Templates:
         help="Project name. Spaces, hyphens and underscores are allowed.",
     )
     p_new.add_argument(
-        "-c", "--category",
-        type=str,
+        "-c", "--category", "--type",
+        type=validate_category,
         default="Video",
-        choices=["Video", "Code", "Web", "AI", "Music", "Audio"],
+        choices=["Video", "Code", "Web", "AI", "Music", "Audio", "Design", "Photo", "Writing", "Podcast", "Client", "Course"],
         help="Project category — determines the folder template used.  (default: Video)",
     )
     p_new.add_argument(
@@ -120,11 +165,21 @@ def cmd_new(args: argparse.Namespace) -> None:
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        if category.lower() in ["web", "code"]: phys_cat = "Code"
-        elif category.lower() in ["music", "audio"]: phys_cat = "Music"
-        elif category.lower() == "ai": phys_cat = "AI"
+        cat_lower = category.lower()
+        if cat_lower in ["web", "code"]: phys_cat = "Code"
+        elif cat_lower in ["music", "audio", "podcast"]: phys_cat = "Music"
+        elif cat_lower == "ai": phys_cat = "AI"
+        elif cat_lower == "design": phys_cat = "Design"
+        elif cat_lower == "photo": phys_cat = "Photo"
+        elif cat_lower == "writing": phys_cat = "Writing"
+        elif cat_lower == "course": phys_cat = "Course"
+        elif cat_lower == "client": phys_cat = "Clients"
         else: phys_cat = "Video"
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
+
+    if not os.path.exists(target_root):
+        os.makedirs(target_root)
+        console.print(f"[success]✨ Created category folder: {os.path.basename(target_root)}[/success]")
 
     target_dir = os.path.join(target_root, slug)
     
@@ -145,11 +200,18 @@ def cmd_new(args: argparse.Namespace) -> None:
     if args.simple: template_name = "simple"
     elif cat_lower == "code": template_name = "plain_code"
     elif cat_lower == "web": template_name = "code_project"
-    elif cat_lower in ["music", "audio"]: template_name = "audio_project"
+    elif cat_lower in ["audio", "music"]: template_name = "audio_project"
     elif cat_lower == "ai": template_name = "ai_project"
+    elif cat_lower == "design": template_name = "design_project"
+    elif cat_lower == "photo": template_name = "photo_project"
+    elif cat_lower == "writing": template_name = "writing_project"
+    elif cat_lower == "podcast": template_name = "podcast_project"
+    elif cat_lower == "client": template_name = "client_project"
+    elif cat_lower == "course": template_name = "course_project"
     else: template_name = "video_project"
 
-    template_file = os.path.join(TEMPLATES_PATH, template_name, "structure.json")
+    template_dir = os.path.join(TEMPLATES_PATH, template_name)
+    template_file = os.path.join(template_dir, "structure.json")
     if not os.path.exists(template_file):
         console.print(f"[error]❌ Template not found: {template_name}[/error]")
         return
@@ -177,10 +239,19 @@ def cmd_new(args: argparse.Namespace) -> None:
             os.makedirs(folder_path, exist_ok=True)
             for item in contents:
                 if "." in item:
-                    if not os.path.exists(os.path.join(folder_path, item)):
-                        with open(os.path.join(folder_path, item), "w") as f:
-                            f.write(f"# {item}\nProject: {project_name}\nCreated: {date_prefix}\n")
+                    item_target = os.path.join(folder_path, item)
+                    if not os.path.exists(item_target):
+                        # Try to copy from template directory if it exists
+                        source_file = os.path.join(template_dir, folder, item)
+                        if os.path.exists(source_file):
+                            import shutil
+                            shutil.copy2(source_file, item_target)
+                        else:
+                            with open(item_target, "w") as f:
+                                f.write(f"# {item}\nProject: {project_name}\nCreated: {date_prefix}\n")
                 else: os.makedirs(os.path.join(folder_path, item), exist_ok=True)
+
+        _apply_template_variables(target_dir, project_name, category, args.client)
 
         notes_dir = os.path.join(target_dir, "00_Notes")
         os.makedirs(notes_dir, exist_ok=True)

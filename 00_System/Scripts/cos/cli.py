@@ -11,7 +11,7 @@ from . import __version__
 from .console import console
 from .config import SCRIPT_DIR
 from .commands import new, clone, init, sync, export, thumbs, clean, sort_exports, travel, resurrect
-from .help_formatter import RichHelpAction
+from .help_formatter import RichHelpAction, RichArgumentParser
 from rich.panel import Panel
 from rich.table import Table
 from rich import box
@@ -142,7 +142,7 @@ def main() -> None:
         show_help_overview()
         sys.exit(0)
 
-    parser = argparse.ArgumentParser(
+    parser = RichArgumentParser(
         prog="cos",
         description="CreativeOS CLI",
         formatter_class=RawTextHelpFormatter,
@@ -158,7 +158,11 @@ def main() -> None:
         help="Show this help message and exit",
     )
 
-    subparsers = parser.add_subparsers(dest="command", title="Commands")
+    subparsers = parser.add_subparsers(
+        dest="command",
+        title="Commands",
+        parser_class=RichArgumentParser
+    )
 
     new.add_parser(subparsers)
     clone.add_parser(subparsers)

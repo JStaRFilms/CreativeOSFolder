@@ -303,79 +303,36 @@ When running commands from within a project, CreativeOS searches for metadata:
 
 ## Templates
 
-Templates define the initial structure for new projects:
+Templates define the initial structure for new projects. Each template folder contains a `structure.json` file that defines the directory hierarchy and initial files to be created.
 
 ```
 00_System\Templates\
 │
-│  ── Current ──────────────────────────────────────────
 ├── video_project\          # Full YouTube/video production
-│   ├── 00_Notes\           # Idea.md, Script.md, Metadata.md, Tasks.md
-│   ├── 01_Footage\         # A-Roll, B-Roll, Screen, Audio, Misc
-│   ├── 02_Assets\          # Graphics, Thumbnails, Music, SFX
-│   ├── 03_Resolve\         # Timelines, Cache, Subtitles
-│   ├── 04_Previews\
-│   └── 99_Archive\
-├── audio_project\          # Music production
-│   ├── 00_Notes\           # Lyrics.md, MixNotes.md, Ideas.md
-│   ├── 01_Project_Files\   # FL_Studio, Ableton, Reaper
-│   ├── 02_Stems\           # Vocals, Drums, Inst
-│   ├── 03_Exports\         # MP3, WAV, Master
-│   ├── 04_Samples\
-│   └── 05_Ref_Tracks\
-├── code_project\           # Software development
-├── ai_project\             # AI/ML projects
-├── auto_video\             # Automated video pipelines
-├── plain_code\             # Minimal code scaffolding
-├── simple\                 # Single-folder minimal project
-│
-│  ── Planned (Task 08.2) ──────────────────────────────
+├── audio_project\          # Music/audio production
 ├── design_project\         # Graphic design / branding / UX
-│   ├── 00_Notes\           # Brief.md, Moodboard_Links.md, Feedback.md
-│   ├── 01_Assets\          # Fonts, Icons, Photos, Brand_Refs
-│   ├── 02_Working_Files\   # Figma, Illustrator, Photoshop, InDesign
-│   ├── 03_Exports\         # Web, Print, Social
-│   └── 04_Presentations\
 ├── photo_project\          # Photography / Lightroom
-│   ├── 00_Notes\           # Brief.md, Shot_List.md
-│   ├── 01_RAW\
-│   ├── 02_Selects\
-│   ├── 03_Edits\           # Lightroom, Photoshop
-│   └── 04_Exports\         # Web, Print, Delivery
 ├── writing_project\        # Articles, scripts, books
-│   ├── 00_Notes\           # Brief.md, Research.md, Outline.md
-│   ├── 01_Drafts\
-│   ├── 02_Edits\
-│   └── 03_Final\
 ├── podcast_project\        # Spoken word / interview episodes
-│   ├── 00_Notes\           # Episode_Brief.md, Guest_Info.md, Questions.md
-│   ├── 01_Recordings\      # Raw, Backup
-│   ├── 02_Editing\
-│   ├── 03_Assets\          # Music, SFX, Artwork
-│   └── 04_Exports\         # MP3, WAV
 ├── client_project\         # General multi-discipline client work
-│   ├── 00_Notes\           # Brief.md, Meetings.md, Tasks.md, Feedback.md
-│   ├── 01_Assets\          # From_Client, Research
-│   ├── 02_Working_Files\
-│   ├── 03_Deliverables\
-│   └── 04_Invoicing\
-└── course_project\         # Video courses / educational content
-    ├── 00_Notes\           # Course_Outline.md, Script_Template.md
-    ├── 01_Scripts\
-    ├── 02_Footage\         # Lessons, Screen_Recordings, B-Roll
-    ├── 03_Assets\          # Slides, Graphics, Music
-    └── 04_Exports\         # Full_Course, Clips, Previews
+├── course_project\         # Video courses / educational content
+├── ai_project\             # AI/ML projects
+├── code_project\           # Software development (Web focus)
+├── plain_code\             # Minimal code scaffolding
+├── auto_video\             # Automated video pipelines
+└── simple\                 # Single-folder minimal project
 ```
 
 ### Template Variables
 
-Templates can include variables that are replaced during creation:
+Templates can include variables in `.md` files that are replaced during project creation:
 
-| Variable | Replaced With |
-|----------|---------------|
-| `{{PROJECT_NAME}}` | Project name |
-| `{{DATE}}` | Creation date |
-| `{{CLIENT}}` | Client name (if provided) |
+| Variable | Replaced With | Example |
+|----------|---------------|---------|
+| `{{PROJECT_NAME}}` | The formatted project name | `My Brand Refresh` |
+| `{{DATE}}` | Creation date (YYYY-MM-DD) | `2026-02-25` |
+| `{{CLIENT}}` | Client name (or "N/A") | `ACME Corp` |
+| `{{TYPE}}` | Project category | `Design` |
 
 ## Configuration
 

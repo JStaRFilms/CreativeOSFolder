@@ -1,0 +1,19 @@
+{
+    "00_Notes": [
+        "Brief.md",
+        "Shot_List.md"
+    ],
+    "01_RAW": [],
+    "02_Selects": [],
+    "03_Edits": [
+        "Lightroom",
+        "Photoshop"
+    ],
+    "04_Exports": [
+        "Web",
+        "Print",
+        "Delivery"
+    ],
+    "05_References": [],
+    "99_Archive": []
+}

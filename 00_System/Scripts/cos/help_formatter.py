@@ -140,3 +140,31 @@ class RichHelpAction(argparse.Action):
 
         console.print()
         parser.exit()
+
+
+class RichArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser subclass that uses Rich for errors and usage."""
+
+    def error(self, message: str) -> None:
+        """Override error to show a beautiful Rich panel."""
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+        
+        # Show the error in a red panel
+        console.print(
+            Panel(
+                f"[bold red]Error:[/bold red] {message}\n\n"
+                f"[dim]Run [bold cyan]{self.prog} -h[/bold cyan] for full usage details.[/dim]",
+                title="[bold red]Invalid Command[/bold red]",
+                border_style="red",
+                padding=(1, 2),
+            )
+        )
+        self.exit(2)
+
+    def print_usage(self, file: Any = None) -> None:
+        """Override usage to be cleaner."""
+        from rich.console import Console
+        console = Console()
+        console.print(f"[bold]Usage:[/bold] [cyan]{self.prog}[/cyan] [options]")
