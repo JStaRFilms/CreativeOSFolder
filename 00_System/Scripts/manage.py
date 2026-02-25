@@ -17,6 +17,7 @@ from argparse import RawTextHelpFormatter
 from urllib.parse import urlparse
 from typing import Optional, Dict, List, Tuple, Any, Union
 from pathlib import Path
+import logging
 
 # Type aliases
 JSONDict = Dict[str, Any]
@@ -263,6 +264,27 @@ VAULT_PATH = CONFIG["vault_path"]
 DOWNLOADS_PATH = CONFIG.get("downloads_path", os.path.join(os.path.expanduser("~"), "Downloads"))
 SHUTTLE_PATH = CONFIG.get("shuttle_path", "A:\\CreativeOS_Shuttle")
 ARCHIVE_PATH = CONFIG.get("archive_path", "D:\\OneDrive - Developer\\Archive")
+
+# --- LOGGING SETUP ---
+LOG_PATH = os.path.join(SCRIPT_DIR, "..", "Config", "creativeos.log")
+
+# Create logger
+logger = logging.getLogger('creativeos')
+logger.setLevel(logging.DEBUG)
+
+# Create file handler
+file_handler = logging.FileHandler(LOG_PATH, encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+
+# Create formatter
+formatter = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+file_handler.setFormatter(formatter)
+
+# Add handler to logger
+logger.addHandler(file_handler)
 
 # --- HELPERS ---
 
@@ -704,6 +726,7 @@ def cmd_new(args: argparse.Namespace) -> None:
         - Creates folder structures.
         - Writes `.project_meta.json` and `00_Notes/Idea.md`.
     """
+    logger.info(f"Creating new project: {args.name} (category: {args.category})")
     # Sanitize project name
     try:
         project_name = sanitize_path_input(args.name)
@@ -833,6 +856,7 @@ tags: [creativeos]
     if args.git:
         setup_git(target_dir, category)
     
+    logger.debug(f"Project created at: {target_dir}")
     console.print(Panel(f"Project successfully spawned at:\n{format_path(target_dir)}", style="bold green", title="✅ Success"))
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -960,6 +984,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
     2. Uses sync state database for incremental syncs
     3. Prunes excluded directories during traversal
     """
+    logger.info("Starting sync operation")
     console.rule("[bold purple]Syncing CreativeOS Brain")
     vault_projects_dir = os.path.join(VAULT_PATH, "01_Active_Projects")
     if not os.path.exists(vault_projects_dir): os.makedirs(vault_projects_dir)
@@ -1032,6 +1057,8 @@ def cmd_sync(args: argparse.Namespace) -> None:
         console.print(changes_table)
         console.print(f"[success]✨ Sync Complete. {total_changes} operations across {projects_synced} projects.[/success]")
 
+    logger.info(f"Sync complete: {total_changes} operations across {projects_synced} projects")
+
 def cmd_thumbs(args: argparse.Namespace) -> None:
     """
     Update the Global Thumbnail Mirror by scanning all projects.
@@ -1100,6 +1127,7 @@ def cmd_clone(args: argparse.Namespace) -> None:
         - Executes `git clone`.
         - Creates initial `.project_meta.json` and `Idea.md`.
     """
+    logger.info(f"Cloning repository: {args.url}")
     url = args.url
     
     # Validate URL
@@ -1207,6 +1235,7 @@ def cmd_clone(args: argparse.Namespace) -> None:
     except OSError:
         pass  # Windows may not support Unix permissions
 
+    logger.debug(f"Clone complete: {target_dir}")
     console.print(Panel(f"Clone Complete!\n{format_path(target_dir)}", style="success"))
 
 def cmd_clean(args: argparse.Namespace) -> None:
