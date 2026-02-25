@@ -16,17 +16,63 @@ from ..security import sanitize_path_input, validate_project_name, validate_clie
 from ..file_utils import get_date_slug, format_path
 
 def add_parser(subparsers: Any) -> None:
-    p_clone = subparsers.add_parser("clone", help="Clone a repo into CreativeOS")
-    p_clone.add_argument("url", type=str, help="Git repository URL")
-    p_clone.add_argument("-n", "--name", type=validate_project_name)
-    p_clone.add_argument(
-        "-c", "--category", 
-        type=str, 
-        default="Video",
-        choices=["Video", "Code", "Web", "AI", "Music", "Audio"]
+    from ..help_formatter import RichHelpAction
+
+    p_clone = subparsers.add_parser(
+        "clone",
+        help="Clone a Git repo and adopt it into CreativeOS",
+        description="""\
+Clone an external Git repository into the CreativeOS project tree and
+automatically adopt it — adding a 00_Notes folder, an Idea.md file, and
+a .project_meta.json tracking record.
+
+The project name defaults to the repository name from the URL but can be
+overridden with -n / --name.\
+""",
+        epilog="""\
+Examples:
+  cos clone https://github.com/user/repo
+  cos clone https://github.com/user/repo -n "My Fork"
+  cos clone https://github.com/user/repo -c Code
+  cos clone https://github.com/user/repo --client Acme
+  cos clone https://github.com/user/repo -d 2025-06-01\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
     )
-    p_clone.add_argument("-d", "--date", type=validate_date)
-    p_clone.add_argument("--client", type=validate_client_name)
+
+    p_clone.add_argument(
+        "url",
+        type=str,
+        help="Git repository URL (HTTPS or SSH).",
+    )
+    p_clone.add_argument(
+        "-n", "--name",
+        type=validate_project_name,
+        help="Override the project name derived from the repository URL.",
+    )
+    p_clone.add_argument(
+        "-c", "--category",
+        type=str,
+        default="Video",
+        choices=["Video", "Code", "Web", "AI", "Music", "Audio"],
+        help="Project category that determines the target folder.  (default: Code for clone)",
+    )
+    p_clone.add_argument(
+        "-d", "--date",
+        type=validate_date,
+        help="Override the creation date prefix (YYYY-MM-DD).  Default: today.",
+    )
+    p_clone.add_argument(
+        "--client",
+        type=validate_client_name,
+        help="Client name — clones the repo inside Clients/<client>/ instead.",
+    )
+    p_clone.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_clone(args: argparse.Namespace) -> None:
     """Clone an external Git repository and adopt it into CreativeOS."""

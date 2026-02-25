@@ -18,7 +18,57 @@ FileFingerprint = Dict[str, Union[float, int]]
 SyncState = Dict[str, Any]
 
 def add_parser(subparsers: Any) -> None:
-    subparsers.add_parser("sync", help="Sync Notes")
+    from ..help_formatter import RichHelpAction
+
+    p_sync = subparsers.add_parser(
+        "sync",
+        help="Sync project notes with Obsidian vault",
+        description="""\
+Bidirectional synchronisation between every project's 00_Notes folder
+and your Obsidian vault (01_Active_Projects/).
+
+How it works:
+  1. Scans all projects for 00_Notes/ folders
+  2. Compares files with vault counterparts using mtime + size
+  3. The newer file always wins; identical files are skipped
+  4. New files are copied in both directions
+  5. Sync state is persisted so subsequent syncs are incremental
+
+Safety:
+  - No files are ever deleted — only copied
+  - Backups are created (.bak) before overwriting a project file
+  - All operations are logged\
+""",
+        epilog="""\
+Examples:
+  cos sync                     Sync all projects
+  cos sync --dry-run           Preview changes without applying them
+  cos sync -v                  Show verbose file-by-file output
+
+Output legend:
+  PUSH  — file copied from project to vault
+  PULL  — file copied from vault to project
+  SKIP  — files are identical, no action taken\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+
+    p_sync.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview all changes that would be made without actually copying anything.",
+    )
+    p_sync.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Show a detailed file-by-file list of every sync operation.",
+    )
+    p_sync.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def load_sync_state() -> SyncState:
     """Load the sync state database for incremental syncs."""

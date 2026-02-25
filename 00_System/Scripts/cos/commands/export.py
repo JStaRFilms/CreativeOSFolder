@@ -8,8 +8,37 @@ from ..console import console
 from ..file_utils import get_export_month_path, find_meta_in_cwd, format_path
 
 def add_parser(subparsers: Any) -> None:
-    p_exp = subparsers.add_parser("export", help="Open export location")
-    p_exp.add_argument("-s", "--simple", action="store_true")
+    from ..help_formatter import RichHelpAction
+
+    p_exp = subparsers.add_parser(
+        "export",
+        help="Open the project or monthly export folder",
+        description="""\
+Open the export destination for the current project (or the current
+month's export root if not inside a project).
+
+When run from inside an initialised project, creates the per-project
+export structure (Video/, Thumbnail/, Audio/) and opens it in Explorer.
+Otherwise opens the current Year/Month export folder.\
+""",
+        epilog="""\
+Examples:
+  cos export               Open the project export folder (auto-detected)
+  cos export --simple      Open the generic month folder only\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    p_exp.add_argument(
+        "-s", "--simple",
+        action="store_true",
+        help="Skip project detection and open the generic monthly export folder.",
+    )
+    p_exp.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_export(args: argparse.Namespace) -> None:
     """Open the export directory for the project or the current month."""

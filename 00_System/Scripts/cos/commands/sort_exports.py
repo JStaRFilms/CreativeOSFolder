@@ -11,7 +11,34 @@ from ..config import EXPORTS_PATH
 from ..file_utils import get_smart_date, format_path
 
 def add_parser(subparsers: Any) -> None:
-    subparsers.add_parser("sort-exports", help="Sort Inbox")
+    from ..help_formatter import RichHelpAction
+
+    p_sort = subparsers.add_parser(
+        "sort-exports",
+        help="File items from Exports/_Inbox into Year/Month folders",
+        description="""\
+Move files and folders from the Exports/_Inbox staging area into the
+correct Year/Month destination automatically.
+
+Files are dated using their creation or modification time (whichever is
+older — 'smart dating').  Destination path format:
+  Exports/<YYYY>/<MM - Month>/<item>
+
+If a file already exists at the destination it is renamed with a _v<N>
+suffix to avoid collisions.\
+""",
+        epilog="""\
+Examples:
+  cos sort-exports      File everything in Exports/_Inbox\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    p_sort.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_sort_exports(args: argparse.Namespace) -> None:
     """File items from the global Export _Inbox into correct Year/Month folders."""

@@ -13,7 +13,39 @@ from ..config import DOWNLOADS_PATH
 from ..file_utils import format_path
 
 def add_parser(subparsers: Any) -> None:
-    subparsers.add_parser("clean", help="Sort Downloads")
+    from ..help_formatter import RichHelpAction
+
+    p_clean = subparsers.add_parser(
+        "clean",
+        help="Sort and categorise the Downloads folder",
+        description="""\
+Sort loose files in your Downloads folder into categorised subfolders.
+Files are moved (not copied) based on their extension:
+
+  _Images      .jpg .jpeg .png .gif .webp .svg .tiff .bmp
+  _Video       .mp4 .mov .avi .mkv .webm .flv .wmv
+  _Audio       .mp3 .wav .aac .flac .ogg .m4a
+  _Docs        .pdf .docx .txt .xlsx .pptx .csv .md
+  _Installers  .exe .msi .iso .dmg
+  _Archives    .zip .rar .7z .tar .gz
+  _Fonts       .ttf .otf .woff .woff2
+  _3D          .blend .fbx .obj .stl .gltf
+  _Other       (everything else)
+
+Hidden files (starting with .) are always left untouched.\
+""",
+        epilog="""\
+Examples:
+  cos clean          Sort the Downloads folder\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    p_clean.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_clean(args: argparse.Namespace) -> None:
     """Sort a specified folder (usually Downloads) into categorized subfolders."""

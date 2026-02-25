@@ -13,7 +13,34 @@ from ..config import PROJECTS_PATH, SHUTTLE_PATH
 from ..file_utils import find_meta_in_cwd, format_path, copy_with_progress
 
 def add_parser(subparsers: Any) -> None:
-    subparsers.add_parser("travel", help="Copy to Shuttle")
+    from ..help_formatter import RichHelpAction
+
+    p_travel = subparsers.add_parser(
+        "travel",
+        help="Copy the active project to the shuttle drive",
+        description="""\
+Copy the current project to the configured external shuttle drive so you
+can work on it away from your main workstation.
+
+Must be run from inside an initialised CreativeOS project directory.
+The project is copied to:
+  <SHUTTLE_PATH>/Projects/<relative-path-in-projects-tree>
+
+A _TRAVEL_LOG.txt timestamp is written so you know when the project was
+last exported.  Remember to eject the drive safely after.\
+""",
+        epilog="""\
+Examples:
+  cd C:\\Projects\\Video\\2026-01-15_My_Film && cos travel\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    p_travel.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_travel(args: argparse.Namespace) -> None:
     """Copy the current active project to the External Shuttle Drive."""

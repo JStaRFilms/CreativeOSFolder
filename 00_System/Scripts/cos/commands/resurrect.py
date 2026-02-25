@@ -13,7 +13,40 @@ from ..config import PROJECTS_PATH, ARCHIVE_PATH
 from ..file_utils import robust_rmtree, copy_with_progress
 
 def add_parser(subparsers: Any) -> None:
-    subparsers.add_parser("resurrect", help="Restore from Archive").add_argument("name", type=str)
+    from ..help_formatter import RichHelpAction
+
+    p_res = subparsers.add_parser(
+        "resurrect",
+        help="Restore an archived project to the active Projects tree",
+        description="""\
+Search the Archive for a project matching the given name (or partial
+name) and move it back into the active Projects tree.
+
+The destination category folder is determined automatically from the
+project's .project_meta.json.  If multiple projects match you will be
+prompted to choose.
+
+The project is MOVED — it is removed from the archive after a
+successful copy.\
+""",
+        epilog="""\
+Examples:
+  cos resurrect my-film        Search archive for "my-film" and restore it
+  cos resurrect "Old Brand"    Partial/fuzzy name matching supported\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    p_res.add_argument(
+        "name",
+        type=str,
+        help="Project name (or partial name) to search for in the Archive.",
+    )
+    p_res.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_resurrect(args: argparse.Namespace) -> None:
     """Restore an archived project back to the Active Projects structure."""

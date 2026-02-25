@@ -16,23 +16,78 @@ from ..git_utils import setup_git
 from ..file_utils import get_date_slug, format_path
 
 def add_parser(subparsers: Any) -> None:
-    p_new = subparsers.add_parser("new", help="Spawn a new project")
+    from ..help_formatter import RichHelpAction
+
+    p_new = subparsers.add_parser(
+        "new",
+        help="Create a new project from template",
+        description="""\
+Create a new project with the specified name and category.
+
+The project is created in the appropriate category folder with a
+date-prefixed slug, e.g. 2026-02-25_My_Project.
+
+A .project_meta.json file is written to track the project and a
+structured 00_Notes/Idea.md is seeded with front-matter metadata.\
+""",
+        epilog="""\
+Examples:
+  cos new "My Video"                     Create a Video project (default category)
+  cos new "Web App" -c Code              Create a Code project
+  cos new "Podcast" -c Audio             Create an Audio project
+  cos new "Logo Design" -c Design        Create a Design project
+  cos new "App" -c Code --git            Create Code project with Git initialised
+  cos new "Client Work" --client Acme    Create project inside Clients/Acme/
+  cos new "Retro Cut" -d 2025-12-01      Create project backdated to 2025-12-01
+
+Templates:
+  Video  -> video_project   (00_Notes, 01_Footage, 02_Audio, 03_Exports, 04_Assets)
+  Code   -> plain_code      (00_Notes, 01_Source, 02_Build, 03_Docs)
+  Audio  -> audio_project   (00_Notes, 01_Recording, 02_Edits, 03_Exports)
+  AI     -> ai_project      (00_Notes, 01_Data, 02_Models, 03_Notebooks, 04_Exports)
+  Web    -> code_project    (00_Notes, 01_Source, 02_Public, 03_Config)\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+
     p_new.add_argument(
-        "name", 
+        "name",
         type=validate_project_name,
-        help="Project name (alphanumeric, spaces, hyphens, underscores)"
+        help="Project name. Spaces, hyphens and underscores are allowed.",
     )
     p_new.add_argument(
-        "-c", "--category", 
-        type=str, 
+        "-c", "--category",
+        type=str,
         default="Video",
         choices=["Video", "Code", "Web", "AI", "Music", "Audio"],
-        help="Project category"
+        help="Project category — determines the folder template used.  (default: Video)",
     )
-    p_new.add_argument("-s", "--simple", action="store_true")
-    p_new.add_argument("-d", "--date", type=validate_date)
-    p_new.add_argument("--client", type=validate_client_name)
-    p_new.add_argument("-g", "--git", action="store_true")
+    p_new.add_argument(
+        "-s", "--simple",
+        action="store_true",
+        help="Use the minimal 'simple' template instead of the full category template.",
+    )
+    p_new.add_argument(
+        "-d", "--date",
+        type=validate_date,
+        help="Override the creation date prefix (YYYY-MM-DD).  Default: today.",
+    )
+    p_new.add_argument(
+        "--client",
+        type=validate_client_name,
+        help="Client name — project is created inside Clients/<client>/ instead of the category folder.",
+    )
+    p_new.add_argument(
+        "-g", "--git",
+        action="store_true",
+        help="Initialise a Git repository inside the new project folder.",
+    )
+    p_new.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_new(args: argparse.Namespace) -> None:
     """Create a new project."""

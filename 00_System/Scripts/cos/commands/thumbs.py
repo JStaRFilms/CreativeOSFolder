@@ -11,7 +11,34 @@ from ..console import console
 from ..config import PROJECTS_PATH, ROOT_PATH
 
 def add_parser(subparsers: Any) -> None:
-    subparsers.add_parser("thumbs", help="Update Gallery")
+    from ..help_formatter import RichHelpAction
+
+    p_thumbs = subparsers.add_parser(
+        "thumbs",
+        help="Generate the global thumbnail gallery",
+        description="""\
+Scan all active projects for thumbnail images and mirror them into the
+global Thumbnails_Mirror gallery at:
+  04_Global_Assets/Thumbnails_Mirror/
+
+Each image is renamed to: YYYY-MM-DD_<project-slug>_<original-name>
+so the gallery is sortable by date and searchable by project.
+
+Only PNG, JPG, JPEG, and WEBP files inside 02_Assets/Thumbnails/ are
+included.  Previously mirrored images are never re-copied.\
+""",
+        epilog="""\
+Examples:
+  cos thumbs          Scan all projects and update the gallery\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    p_thumbs.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_thumbs(args: argparse.Namespace) -> None:
     """Update the Global Thumbnail Mirror by scanning all projects."""

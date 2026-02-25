@@ -17,7 +17,37 @@ from ..console import console
 from ..file_utils import get_smart_date
 
 def add_parser(subparsers: Any) -> None:
-    subparsers.add_parser("init", help="Adopt current folder")
+    from ..help_formatter import RichHelpAction
+
+    p_init = subparsers.add_parser(
+        "init",
+        help="Adopt the current folder as a CreativeOS project",
+        description="""\
+Adopt the current working directory as a CreativeOS project.
+
+Scans the directory context to infer the project name, category, client,
+and creation date automatically.  Writes a .project_meta.json file and
+creates a 00_Notes/Idea.md with front-matter metadata.
+
+Run this from inside an existing folder that you want to bring under
+CreativeOS management — for example, a project imported manually or an
+un-tracked legacy project.\
+""",
+        epilog="""\
+Examples:
+  cd C:\\Projects\\Video\\My_Old_Project
+  cos init
+
+  cd C:\\Projects\\Code\\My_Script && cos init\
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    p_init.add_argument(
+        "-h", "--help",
+        action=RichHelpAction,
+        help="Show this help message and exit.",
+    )
 
 def cmd_init(args: argparse.Namespace) -> None:
     """Adopt the current working directory as a CreativeOS project."""

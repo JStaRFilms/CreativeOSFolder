@@ -1,4 +1,4 @@
-"""Main CLI entry point."""
+"""Main CLI entry point for CreativeOS."""
 
 import argparse
 import sys
@@ -11,16 +11,22 @@ from . import __version__
 from .console import console
 from .config import SCRIPT_DIR
 from .commands import new, clone, init, sync, export, thumbs, clean, sort_exports, travel, resurrect
+from .help_formatter import RichHelpAction
 from rich.panel import Panel
 from rich.table import Table
 from rich import box
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Exception handler
+# ──────────────────────────────────────────────────────────────────────────────
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     """Custom exception handler for beautiful error display via Rich."""
     if issubclass(exc_type, KeyboardInterrupt):
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         sys.exit(1)
-    
+
     console.print(Panel(
         f"[bold red]An unexpected error occurred:[/bold red]\n\n"
         f"[dim]{exc_type.__name__}:[/dim] {exc_value}\n\n"
@@ -28,7 +34,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         title=" Error ",
         border_style="red"
     ))
-    
+
     log_path = os.path.join(SCRIPT_DIR, "..", "..", "Config", "error.log")
     try:
         with open(log_path, "a", encoding="utf-8") as f:
@@ -39,52 +45,121 @@ def handle_exception(exc_type, exc_value, exc_traceback):
             traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
     except Exception:
         pass
-    
+
     sys.exit(1)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rich help overview  (shown for `cos` and `cos -h / --help`)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def show_help_overview() -> None:
+    """Show the full, richly-formatted help overview and exit."""
+
+    banner = (
+        "  ______                _   _            ___  ____\n"
+        " / ____/________  ____ | | | |__   ___  / _ \\/ ___|\n"
+        "| |   | '__/ _ \\/ _` || |_| |\\ \\ / / _ \\| | | \\___ \\\n"
+        "| |___| | |  __/ (_| ||  _  | \\ V /  __/ |_| |___) |\n"
+        " \\____|_|  \\___|\\__,_||_| |_|  \\_/ \\___|\\___/|____/"
+    )
+    console.print(
+        Panel.fit(
+            f"[bold purple]{banner}[/bold purple]",
+            title=f"[bold white]CreativeOS CLI[/bold white]  [dim]v{__version__}[/dim]",
+            border_style="purple",
+            padding=(1, 2),
+        )
+    )
+
+    # ── Creation commands ─────────────────────────────────────────────────────
+    creation = Table(title="[bold]CREATION[/bold]", box=box.ROUNDED, border_style="cyan",
+                     show_header=True, header_style="bold magenta", padding=(0, 1))
+    creation.add_column("Command", style="cyan bold", no_wrap=True)
+    creation.add_column("Description", style="white")
+    creation.add_column("Example", style="dim")
+    creation.add_row("new <name>",  "Create a new project from template",  'cos new "My Video" -c Video')
+    creation.add_row("clone <url>", "Clone a Git repo and adopt it into OS", "cos clone https://github.com/u/repo")
+    creation.add_row("init",        "Adopt current folder as a COS project", "cos init")
+
+    # ── Maintenance commands ──────────────────────────────────────────────────
+    maint = Table(title="[bold]MAINTENANCE[/bold]", box=box.ROUNDED, border_style="blue",
+                  show_header=True, header_style="bold magenta", padding=(0, 1))
+    maint.add_column("Command", style="cyan bold", no_wrap=True)
+    maint.add_column("Description", style="white")
+    maint.add_column("Example", style="dim")
+    maint.add_row("sync",         "Sync project notes with Obsidian vault", "cos sync")
+    maint.add_row("thumbs",       "Generate global thumbnail gallery",       "cos thumbs")
+    maint.add_row("clean",        "Sort and categorise Downloads folder",    "cos clean")
+    maint.add_row("sort-exports", "File Exports/_Inbox into Year/Month",      "cos sort-exports")
+
+    # ── Workflow commands ─────────────────────────────────────────────────────
+    workflow = Table(title="[bold]WORKFLOW[/bold]", box=box.ROUNDED, border_style="green",
+                     show_header=True, header_style="bold magenta", padding=(0, 1))
+    workflow.add_column("Command", style="cyan bold", no_wrap=True)
+    workflow.add_column("Description", style="white")
+    workflow.add_column("Example", style="dim")
+    workflow.add_row("export",    "Open the project or month export folder", "cos export")
+    workflow.add_row("travel",    "Copy active project to shuttle drive",     "cos travel")
+    workflow.add_row("resurrect", "Restore an archived project to active",   "cos resurrect my-film")
+
+    console.print()
+    console.print(creation)
+    console.print()
+    console.print(maint)
+    console.print()
+    console.print(workflow)
+
+    # ── Quick reference footer ────────────────────────────────────────────────
+    console.print()
+    console.print(Panel(
+        "[bold]Usage:[/bold]  cos <command> [options]\n\n"
+        "[bold]Command help:[/bold]  cos <command> [bold cyan]-h[/bold cyan]\n\n"
+        "[bold]Examples:[/bold]\n"
+        '  cos new "My Film" -c Video          Create video project\n'
+        '  cos new "Web App" -c Code --git     Create code project with Git\n'
+        "  cos sync                            Sync notes with Obsidian\n"
+        "  cos travel                          Copy project to shuttle drive\n"
+        "  cos resurrect my-old-film           Restore archived project",
+        title="[bold]Quick Reference[/bold]",
+        border_style="dim",
+        padding=(1, 2),
+    ))
+    console.print()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main entry point
+# ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     """Main entry point for CreativeOS CLI."""
     sys.excepthook = handle_exception
-    
-    banner = """
-    ______                _   _            ___  ____
-   / ____/________  ____ | | | |__   ___  / _ \/ ___|
-  | |   | '__/ _ \/ _` || |_| |\ \ / / _ \| | | \___ \\
-  | |___| | |  __/ (_| ||  _  | \ V /  __/ |_| |___) |
-   \____|_|  \___|\__,_||_| |_|  \_/ \___|\___/|____/
-    """
-    
-    if len(sys.argv) == 1:
-        console.print(Panel.fit(f"[bold purple]{banner}[/bold purple]", title="CreativeOS CLI", border_style="purple"))
-        
-        table = Table(box=box.SIMPLE, show_header=False)
-        table.add_column("Command", style="cyan bold")
-        table.add_column("Description", style="white")
-        
-        table.add_row("", "[bold underline]CREATION[/bold underline]")
-        table.add_row("new <name>", "Create fresh project")
-        table.add_row("clone <url>", "Clone Git repo & adopt into OS")
-        table.add_row("init", "Adopt current folder")
-        table.add_row("", "")
-        table.add_row("", "[bold underline]MAINTENANCE[/bold underline]")
-        table.add_row("sync", "Sync Notes")
-        table.add_row("export", "Open Export Folder")
-        table.add_row("thumbs", "Update Thumbnail Gallery")
-        table.add_row("clean", "Sort Downloads")
-        table.add_row("travel", "Copy to Shuttle Drive")
-        table.add_row("resurrect", "Restore from Archive")
-        
-        console.print(table)
-        console.print("\nUse [bold]cos <command> -h[/bold] for flags.")
+
+    # Intercept `cos` (no args) or `cos -h` / `cos --help` BEFORE argparse
+    # so we can show the full Rich overview instead of the terse argparse output.
+    if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ("-h", "--help")):
+        show_help_overview()
         sys.exit(0)
 
     parser = argparse.ArgumentParser(
         prog="cos",
         description="CreativeOS CLI",
-        formatter_class=RawTextHelpFormatter
+        formatter_class=RawTextHelpFormatter,
+        # Disable argparse's built-in help so our pre-check above handles it
+        add_help=False,
     )
+    # Re-add help manually so it appears in subparser listings but routes through
+    # our overview function (handled by the pre-check above).
+    parser.add_argument(
+        "-h", "--help",
+        action="store_true",
+        default=False,
+        help="Show this help message and exit",
+    )
+
     subparsers = parser.add_subparsers(dest="command", title="Commands")
-    
+
     new.add_parser(subparsers)
     clone.add_parser(subparsers)
     init.add_parser(subparsers)
@@ -95,21 +170,23 @@ def main() -> None:
     sort_exports.add_parser(subparsers)
     travel.add_parser(subparsers)
     resurrect.add_parser(subparsers)
-    
+
     args = parser.parse_args()
     args.category_flag_passed = "-c" in sys.argv or "--category" in sys.argv
-    
-    if args.command == "new": new.cmd_new(args)
-    elif args.command == "clone": clone.cmd_clone(args)
-    elif args.command == "init": init.cmd_init(args)
-    elif args.command == "export": export.cmd_export(args)
-    elif args.command == "sync": sync.cmd_sync(args)
-    elif args.command == "thumbs": thumbs.cmd_thumbs(args)
-    elif args.command == "clean": clean.cmd_clean(args)
-    elif args.command == "sort-exports": sort_exports.cmd_sort_exports(args)
-    elif args.command == "travel": travel.cmd_travel(args)
-    elif args.command == "resurrect": resurrect.cmd_resurrect(args)
-    else: parser.print_help()
+
+    if args.command == "new":             new.cmd_new(args)
+    elif args.command == "clone":         clone.cmd_clone(args)
+    elif args.command == "init":          init.cmd_init(args)
+    elif args.command == "export":        export.cmd_export(args)
+    elif args.command == "sync":          sync.cmd_sync(args)
+    elif args.command == "thumbs":        thumbs.cmd_thumbs(args)
+    elif args.command == "clean":         clean.cmd_clean(args)
+    elif args.command == "sort-exports":  sort_exports.cmd_sort_exports(args)
+    elif args.command == "travel":        travel.cmd_travel(args)
+    elif args.command == "resurrect":     resurrect.cmd_resurrect(args)
+    else:
+        show_help_overview()
+
 
 if __name__ == "__main__":
     main()
