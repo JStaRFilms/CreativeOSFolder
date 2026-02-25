@@ -290,6 +290,15 @@ def format_path(path: str) -> str:
 
 
 def get_export_month_path() -> str:
+    """
+    Generate the path for the current month's export folder.
+    
+    Creates the directory structure if it doesn't exist, organized by
+    year and month (e.g., 2026/02 - February).
+    
+    Returns:
+        The absolute path to the current month's export directory as a string.
+    """
     now = datetime.datetime.now()
     year: str = now.strftime("%Y")
     month_name: str = now.strftime("%B")
@@ -541,7 +550,18 @@ def sync_two_folders(dir_a: str, dir_b: str, prev_state: Optional[SyncState] = N
     return logs, new_state
 
 def copy_with_progress(src: str, dst: str) -> None:
-    """Copies files from src to dst, showing a rich progress bar."""
+    """
+    Copy files from source to destination showing a Rich progress bar.
+    
+    Args:
+        src: The source directory path to copy from.
+        dst: The destination directory path to copy to.
+        
+    Side Effects:
+        - Creates destination directory and subdirectories if they don't exist.
+        - Copies all files from src to dst.
+        - Displays a CLI progress bar via rich.
+    """
     os.makedirs(dst, exist_ok=True)
     
     all_files = []
@@ -568,7 +588,18 @@ def copy_with_progress(src: str, dst: str) -> None:
             progress.advance(task)
 
 def setup_git(project_path: str, category: str) -> None:
-    """Initializes Git and adds .gitignore."""
+    """
+    Initialize a Git repository and add a .gitignore file.
+    
+    Args:
+        project_path: The absolute path to the project directory.
+        category: The project category.
+        
+    Side Effects:
+        - Runs `git init` in the project directory.
+        - Copies universal `.gitignore` or creates a default one.
+        - Prompts the user and optionally performs an initial commit.
+    """
     console.print("   [info]🔧 Initializing Git Repository...[/info]")
     
     # 1. Run git init
@@ -613,6 +644,25 @@ def setup_git(project_path: str, category: str) -> None:
 # --- COMMANDS ---
 
 def cmd_new(args: argparse.Namespace) -> None:
+    """
+    Create a new project with the specified name and options.
+    
+    This command determines the correct project location, instantiates it from
+    a template, writes metadata, and potentially initializes Git.
+    
+    Args:
+        args: Parsed arguments from argparse including:
+            - name: Project name.
+            - category: Project category (e.g., Video, Code).
+            - simple: Boolean to use the simple template.
+            - date: Optional override date.
+            - client: Optional client name.
+            - git: Boolean to initialize Git.
+            
+    Side Effects:
+        - Creates folder structures.
+        - Writes `.project_meta.json` and `00_Notes/Idea.md`.
+    """
     # Sanitize project name
     try:
         project_name = sanitize_path_input(args.name)
@@ -745,6 +795,19 @@ tags: [creativeos]
     console.print(Panel(f"Project successfully spawned at:\n{format_path(target_dir)}", style="bold green", title="✅ Success"))
 
 def cmd_init(args: argparse.Namespace) -> None:
+    """
+    Adopt the current working directory as a CreativeOS project.
+    
+    Infers project metadata based on the folder's name, parent folders,
+    and modification times, then writes a `.project_meta.json`.
+    
+    Args:
+        args: Parsed arguments from argparse (currently no specific args used).
+        
+    Side Effects:
+        - Writes `.project_meta.json` inside current folder if not already initialized.
+        - Creates `00_Notes/Idea.md` if missing.
+    """
     cwd = os.getcwd()
     if not cwd.startswith(PROJECTS_PATH):
         console.print("[warning]⚠️  Not in CreativeOS Projects folder.[/warning]")
@@ -825,6 +888,17 @@ tags: [creativeos]
     console.print(Panel(f"Project adopted! Slug: [bold]{slug}[/bold]", style="success"))
 
 def cmd_export(args: argparse.Namespace) -> None:
+    """
+    Open the export directory for the project or the current month.
+    
+    Args:
+        args: Parsed arguments:
+            - simple: Boolean. If True, only opens the overarching month export path.
+            
+    Side Effects:
+        - Creates export subdirectories (Video, Thumbnail, Audio) if project meta found.
+        - Opens the target folder using os.startfile.
+    """
     month_path = get_export_month_path()
     meta, project_root = find_meta_in_cwd()
     
@@ -918,6 +992,20 @@ def cmd_sync(args: argparse.Namespace) -> None:
         console.print(f"[success]✨ Sync Complete. {total_changes} operations across {projects_synced} projects.[/success]")
 
 def cmd_thumbs(args: argparse.Namespace) -> None:
+    """
+    Update the Global Thumbnail Mirror by scanning all projects.
+    
+    Finds all images in `02_Assets/Thumbnails` within valid project directories
+    and copies them to the global thumbnails mirror folder.
+    
+    Args:
+        args: Parsed arguments from argparse (no specific args used).
+        
+    Side Effects:
+        - Copies `.jpg`, `.png`, `.webp` images to `04_Global_Assets/Thumbnails_Mirror`.
+        - Prepends file names with project slug and timestamp to avoid collisions.
+        - Opens the gallery folder in Explorer.
+    """
     console.print("[bold purple]🖼️  Spinning up Thumbnail Mirror...[/bold purple]")
     gallery_root = os.path.join(ROOT_PATH, "04_Global_Assets", "Thumbnails_Mirror")
     if not os.path.exists(gallery_root): os.makedirs(gallery_root)
@@ -952,7 +1040,25 @@ def cmd_thumbs(args: argparse.Namespace) -> None:
     os.startfile(gallery_root)
 
 def cmd_clone(args: argparse.Namespace) -> None:
-    """Clones a Git repo and adopts it into CreativeOS."""
+    """
+    Clone an external Git repository and adopt it into CreativeOS.
+    
+    Validates the Git URL, determines the destination folder based on category,
+    clones the project via subprocess, and adds `.project_meta.json` and basic notes.
+    
+    Args:
+        args: Parsed arguments:
+            - url: Valid Git URL (HTTPS or SSH).
+            - name: Project name (optional, extracted from URL if not given).
+            - category: Project Category (default "Video", coerced to "Code" if no flag passed).
+            - date: Creation date.
+            - client: Client name for folder grouping.
+            - category_flag_passed: Used to force category if passed manually.
+    
+    Side Effects:
+        - Executes `git clone`.
+        - Creates initial `.project_meta.json` and `Idea.md`.
+    """
     url = args.url
     
     # Validate URL
@@ -1063,7 +1169,22 @@ def cmd_clone(args: argparse.Namespace) -> None:
     console.print(Panel(f"Clone Complete!\n{format_path(target_dir)}", style="success"))
 
 def cmd_clean(args: argparse.Namespace) -> None:
-    target_path = args.target if args.target else DOWNLOADS_PATH
+    """
+    Sort a specified folder (usually Downloads) into categorized subfolders.
+    
+    Categorizes files into _Images, _Video, _Audio, _Docs, _Installers,
+    _Archives, _Fonts, _3D and _Other based on their file extensions.
+    
+    Args:
+        args: Parsed arguments from argparse:
+            - target: Optional directory path to clean (defaults to config's downloads).
+    
+    Side Effects:
+        - Creates categorical folders inside the target directory.
+        - Moves files based on hardcoded extension mappings.
+        - Output tables to standard out detailing file moves.
+    """
+    target_path = getattr(args, 'target', DOWNLOADS_PATH) if hasattr(args, 'target') and args.target else DOWNLOADS_PATH
 
     console.print(f"[bold cyan]🧹 Cleaning: {format_path(target_path)}...[/bold cyan]")
     if not os.path.exists(target_path):
@@ -1123,6 +1244,20 @@ def cmd_clean(args: argparse.Namespace) -> None:
     os.startfile(target_path)
 
 def cmd_sort_exports(args: argparse.Namespace) -> None:
+    """
+    File items from the global Export _Inbox into correct Year/Month folders.
+    
+    Reads modification times to heuristically determine when a file was
+    exported, then moves it to `YYYY/MM - MonthName`. Renames files
+    if a collision occurs.
+    
+    Args:
+        args: Parsed arguments from argparse (none used explicitly here).
+        
+    Side Effects:
+        - Creates destination folders in the export directory.
+        - Moves directories and files from `_Inbox`.
+    """
     inbox_path = os.path.join(EXPORTS_PATH, "_Inbox")
     if not os.path.exists(inbox_path):
         os.makedirs(inbox_path)
@@ -1166,7 +1301,22 @@ def cmd_sort_exports(args: argparse.Namespace) -> None:
     console.print(f"[success]✨ Sorted {count} items.[/success]")
 
 def cmd_travel(args: argparse.Namespace) -> None:
-    """Copies the current project to the External Shuttle Drive."""
+    """
+    Copy the current active project to the External Shuttle Drive.
+    
+    Validates the presence of `.project_meta.json`, ensures the
+    Shuttle Drive is mounted and accessible via config path,
+    and then copies everything over with a Rich progress bar.
+    Appends a log to `_TRAVEL_LOG.txt` inside the shuttle root.
+    
+    Args:
+        args: Parsed arguments from argparse (no specific args).
+        
+    Side Effects:
+        - Reads and copies the entire project directory.
+        - Creates or appends to `_TRAVEL_LOG.txt`.
+        - Prompts via `rich.prompt.Confirm`.
+    """
     meta, project_root = find_meta_in_cwd()
     
     if not meta:
@@ -1203,10 +1353,35 @@ def cmd_travel(args: argparse.Namespace) -> None:
         console.print(f"[error]❌ Copy failed: {e}[/error]")
 
 def remove_readonly(func: Any, path: str, excinfo: Any) -> None:
+    """
+    Error handler for shutil.rmtree to remove read-only attribute and retry.
+    
+    When a file cannot be deleted because it is read-only, this function
+    changes its permissions and calls the failed function again.
+    
+    Args:
+        func: The function that failed (e.g., os.remove).
+        path: Path to the file that failed to delete.
+        excinfo: Exception information from sys.exc_info().
+    """
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
 def robust_rmtree(path: str, retries: int = 5, delay: int = 1) -> bool:
+    """
+    Aggressively remove a directory tree, overcoming file locks up to N retries.
+    
+    Since Windows frequently locks files/directories, this retries deleting
+    and leverages the `remove_readonly` callback.
+    
+    Args:
+        path: Directory path to remove.
+        retries: Number of attempts.
+        delay: Seconds to wait between attempts.
+    
+    Returns:
+        True if the directory was successfully removed, False otherwise.
+    """
     for i in range(retries):
         try:
             shutil.rmtree(path, onerror=remove_readonly)
@@ -1218,7 +1393,22 @@ def robust_rmtree(path: str, retries: int = 5, delay: int = 1) -> bool:
     return False
 
 def cmd_resurrect(args: argparse.Namespace) -> None:
-    """Brings a project back from the dead (Archive -> Active)."""
+    """
+    Restore an archived project back to the Active Projects structure.
+    
+    Searches the global `ARCHIVE_PATH` for folders partially matching
+    the provided search term. Presents an interactive list if multiple matches
+    are found. The project is then moved back and its category is assigned.
+    
+    Args:
+        args: Parsed arguments from argparse:
+            - name: Project substring or full name to search for.
+            
+    Side Effects:
+        - Scans the archive.
+        - Moves folders across the filesystem using shutil copy then rmtree.
+        - Uses CLI prompts and interactions via rich.
+    """
     search_term = args.name.lower()
     console.print(f"🔎 Searching Archive for: '[cyan]{args.name}[/cyan]'...")
     
@@ -1297,6 +1487,16 @@ def cmd_resurrect(args: argparse.Namespace) -> None:
 # --- MAIN ---
 
 def main() -> None:
+    """
+    Primary entry point for the CreativeOS CLI.
+    
+    Defines argparse structure, routes subcommands to handler functions,
+    and shows a styled welcome banner/help page if no arguments are passed.
+    
+    Side Effects:
+        - Exits system if help logic determines so (`sys.exit(0)`).
+        - Calls functions that may run subprocesses or generate files.
+    """
     banner = """
     ______                _   _            ___  ____
    / ____/________  ____ | | | |__   ___  / _ \/ ___|
