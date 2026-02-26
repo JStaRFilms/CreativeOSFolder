@@ -150,7 +150,7 @@ cos sync
 | Command | Description | Example |
 |---------|-------------|---------|
 | `setup` | Run setup wizard | `cos setup` |
-| `config` | View/edit configuration | `cos config --list` |
+| `config` | View/edit configuration | `cos config show` |
 | `category` | Manage project categories | `cos category list` |
 
 ### Help
