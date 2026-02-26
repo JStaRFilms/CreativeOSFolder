@@ -224,6 +224,9 @@ def run_onboarding_wizard(console: Console = None) -> Optional[Dict[str, Any]]:
 def apply_configuration(config: Dict[str, Any]) -> bool:
     """Apply the configuration from onboarding wizard.
     
+    Writes both config.json (paths/settings) and categories.json
+    (enabled categories and default category) from the wizard results.
+    
     Args:
         config: Configuration dictionary from wizard.
         
@@ -260,6 +263,46 @@ def apply_configuration(config: Dict[str, Any]) -> bool:
         console.print(f"[error]❌ Failed to save configuration: {e}[/error]")
         return False
     
+    # Reload the config module so lazy-loaded values pick up the new file
+    from .config import reload_config
+    reload_config()
+    
+    # Create categories.json with user's selected categories
+    from .category_config import DEFAULT_CATEGORIES, save_categories
+    
+    enabled_categories = config.get("enabled_categories", [])
+    default_category = config.get("default_category", "Video")
+    
+    # Build categories dict — mark each category as enabled/disabled
+    # based on the user's selections from the onboarding wizard
+    categories = {}
+    for cat_name, cat_config in DEFAULT_CATEGORIES.items():
+        cat_entry = dict(cat_config)  # shallow copy
+        if enabled_categories:
+            cat_entry["enabled"] = cat_name in enabled_categories
+        # else: keep the default (all enabled)
+        categories[cat_name] = cat_entry
+    
+    categories_config = {
+        "version": "1.0",
+        "default_category": default_category,
+        "simple_template": "simple",
+        "categories": categories,
+        "available_icons": [
+            "🎬", "💻", "🎵", "🤖", "🎨", "📷", "✍️", "🎙️", "📚",
+            "👥", "🎮", "📱", "🔧", "📊", "🎯",
+        ],
+    }
+    
+    if not save_categories(categories_config):
+        console.print("[error]❌ Failed to save categories configuration[/error]")
+        return False
+    
+    logger.info(
+        f"Created categories.json: {len(enabled_categories)} enabled, "
+        f"default='{default_category}'"
+    )
+    
     # Create directories if they don't exist
     for path_key in ["projects_path", "vault_path", "archive_path", "exports_path"]:
         path = Path(main_config[path_key])
@@ -270,6 +313,7 @@ def apply_configuration(config: Dict[str, Any]) -> bool:
             logger.warning(f"Could not create directory {path}: {e}")
     
     console.print("[green]✅ Configuration saved![/green]")
+    console.print("[green]✅ Categories configured![/green]")
     console.print("[green]✅ Created project directories![/green]")
     
     return True
