@@ -1,4 +1,6 @@
-# Security Policy
+# CreativeOS — Security Policy
+
+> **Your Creative Nervous System** · Security policy and vulnerability reporting
 
 ## Supported Versions
 
@@ -6,6 +8,7 @@ We release patches for security vulnerabilities for the following versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 2.1.x   | :white_check_mark: |
 | 1.0.x   | :white_check_mark: |
 | < 1.0   | :x:                |
 

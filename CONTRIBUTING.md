@@ -1,6 +1,8 @@
 # Contributing to CreativeOS
 
-First off, thank you for considering contributing to CreativeOS! It's people like you that make CreativeOS such a great tool.
+> **Your Creative Nervous System** · Contribution guidelines
+
+First off, thank you for considering contributing to CreativeOS! It's people like you that make this tool great.
 
 ## Table of Contents
 
@@ -22,7 +24,7 @@ This project and everyone participating in it is governed by common sense and re
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - pip (Python package manager)
 - Git
 - A code editor (VS Code recommended)
@@ -32,12 +34,12 @@ This project and everyone participating in it is governed by common sense and re
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/CreativeOS.git
-   cd CreativeOS
+   git clone https://github.com/YOUR_USERNAME/CreativeOSFolder.git
+   cd CreativeOSFolder
    ```
 3. Add the upstream remote:
    ```bash
-   git remote add upstream https://github.com/ORIGINAL_OWNER/CreativeOS.git
+   git remote add upstream https://github.com/JStaRFilms/CreativeOSFolder.git
    ```
 
 ## Development Setup
@@ -57,8 +59,8 @@ source venv/bin/activate
 ### 2. Install Dependencies
 
 ```bash
-pip install -r 00_System/Scripts/requirements.txt
-pip install -r 00_System/Scripts/requirements-dev.txt
+pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 ### 3. Install in Development Mode

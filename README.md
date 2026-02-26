@@ -1,22 +1,22 @@
-# 🚀 CreativeOS
-
 <div align="center">
 
 ```
-   ______                _   _            ___  ____ 
-  / ____/________  ____ | | | |__   ___  / _ \/ ___|
- | |   | '__/ _ \/ _` || |_| |\ \ / / _ \| | | \___ \
- | |___| | |  __/ (_| ||  _  | \ V /  __/ |_| |___) |
-  \____|_|  \___|\__,_||_| |_|  \_/ \___|\___/|____/ 
+   ██████╗██████╗ ███████╗ █████╗ ████████╗██╗██╗   ██╗███████╗ ██████╗ ███████╗
+  ██╔════╝██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║██║   ██║██╔════╝██╔═══██╗██╔════╝
+  ██║     ██████╔╝█████╗  ███████║   ██║   ██║██║   ██║█████╗  ██║   ██║███████╗
+  ██║     ██╔══██╗██╔══╝  ██╔══██║   ██║   ██║╚██╗ ██╔╝██╔══╝  ██║   ██║╚════██║
+  ╚██████╗██║  ██║███████╗██║  ██║   ██║   ██║ ╚████╔╝ ███████╗╚██████╔╝███████║
+   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚══════╝
 ```
 
-**The Central Nervous System for Creative Workflows**
+**Your Creative Nervous System — One CLI to Rule Your Entire Workflow**
 
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/JStaRFilms/CreativeOSFolder)
-[![Python](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-2.1.0-purple.svg)](https://github.com/JStaRFilms/CreativeOSFolder)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
 
-[Installation](#-installation) • [Quick Start](#-quick-start) • [Commands](#-commands) • [Documentation](#-documentation)
+[Installation](#-installation) • [Quick Start](#-quick-start) • [Commands](#-command-hub) • [Architecture](#-architecture) • [Docs](#-documentation)
 
 </div>
 
@@ -24,15 +24,19 @@
 
 ## What is CreativeOS?
 
-CreativeOS is a **context-aware CLI** that transforms your file system into an intelligent project management system. It bridges your active projects, Obsidian vault, archives, and portable drives through a unified command interface.
+CreativeOS is a **context-aware CLI** that turns your file system into an intelligent, opinionated project management system. It bridges your active projects, Obsidian vault, archives, and portable drives through a single `cos` command.
 
-**Key Features:**
-- 🎯 **Project Scaffolding** — 12 templates for Video, Code, AI, Audio, Design, Photo, Writing, Podcast, Course, and Client work
-- 🔄 **Bidirectional Sync** — Seamless sync between projects and Obsidian vault
-- 🧠 **Context Awareness** — Run commands from anywhere in a project (3-Level Up Rule)
-- 📦 **Archive Workflow** — Move projects to cold storage and resurrect them when needed
-- 🔒 **Security Hardened** — Input sanitization, path validation, and injection prevention
-- ⚡ **Rich CLI** — Beautiful terminal output with progress indicators
+Whether you're editing a YouTube video, writing code, producing a podcast, or designing for a client — CreativeOS gives every project the same structured foundation and keeps everything in sync.
+
+**Why creators love it:**
+
+- 🎯 **Instant Scaffolding** — 12+ templates for Video, Code, AI, Audio, Design, Photo, Writing, Podcast, Course, and Client work
+- 🔄 **Obsidian Sync** — Bidirectional sync between project notes and your vault
+- 🧠 **Context Awareness** — Run commands from *anywhere* inside a project (3-Level Up Rule)
+- 📦 **Archive & Resurrect** — Move projects to cold storage. Bring them back when inspiration strikes
+- 🚀 **Shuttle Drive** — Pack a project onto an external drive and keep working anywhere
+- 🔒 **Security Hardened** — Input sanitization, path validation, and injection prevention baked in
+- ⚡ **Beautiful CLI** — Rich terminal output with panels, tables, and progress indicators
 
 ---
 
@@ -69,11 +73,11 @@ Edit `config.json` with your paths:
 
 ```json
 {
-  "root_path": "D:\\CreativeOS",
-  "projects_path": "D:\\CreativeOS\\01_Projects",
-  "vault_path": "D:\\CreativeOS\\03_Vault",
-  "archive_path": "E:\\Archive",
-  "shuttle_path": "F:\\Shuttle"
+  "root_path": "C:\\CreativeOS",
+  "projects_path": "C:\\CreativeOS\\01_Projects",
+  "vault_path": "C:\\CreativeOS\\03_Vault",
+  "archive_path": "D:\\OneDrive - MSFT\\Archive",
+  "shuttle_path": "A:\\CreativeOS_Shuttle"
 }
 ```
 
@@ -82,7 +86,7 @@ Edit `config.json` with your paths:
 Add `cos.bat` to your PATH for global access:
 
 ```batch
-# The batch file is already configured with relative paths
+# The batch file uses relative paths automatically
 # Just add 00_System\Scripts to your PATH environment variable
 ```
 
@@ -118,39 +122,39 @@ cos sync
 
 ---
 
-## 📋 Commands
+## 📋 Command Hub
 
-### Project Lifecycle
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `new` | Create a new project from template | `cos new "Video Project" -c Video` |
-| `clone` | Clone a Git repo as a project | `cos clone https://github.com/user/repo.git` |
-| `init` | Adopt current directory as a project | `cos init` |
-| `travel` | Move project to shuttle drive | `cos travel` |
-| `resurrect` | Restore project from archive | `cos resurrect "Old Project"` |
-
-### Synchronization
+### Creation
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `sync` | Bidirectional sync with Obsidian vault | `cos sync` |
+| `new <name>` | Create a new project from template | `cos new "Video Project" -c Video` |
+| `clone <url>` | Clone a Git repo and adopt it into COS | `cos clone https://github.com/user/repo.git` |
+| `init` | Adopt current folder as a COS project | `cos init` |
 
-### Organization
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `clean` | Sort Downloads folder by file type | `cos clean` |
-| `sort-exports` | Organize exports by date | `cos sort-exports` |
-| `thumbs` | Generate thumbnail gallery | `cos thumbs` |
-| `export` | Open exports folder | `cos export` |
-
-### Configuration
+### Maintenance
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `setup` | Run setup wizard | `cos setup` |
-| `config` | View/edit configuration | `cos config show` |
+| `sync` | Sync project notes with Obsidian vault | `cos sync` |
+| `thumbs` | Generate global thumbnail gallery | `cos thumbs` |
+| `clean` | Sort and categorise Downloads folder | `cos clean` |
+| `sort-exports` | File Exports/_Inbox into Year/Month | `cos sort-exports` |
+
+### Workflow
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `export` | Open the project or month export folder | `cos export` |
+| `travel` | Copy active project to shuttle drive | `cos travel` |
+| `resurrect` | Restore an archived project to active | `cos resurrect "Old Project"` |
+
+### Management
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `setup` | Configure CreativeOS (paths, categories, reset) | `cos setup` |
+| `config` | View and edit configuration | `cos config show` |
 | `category` | Manage project categories | `cos category list` |
 
 ### Help
@@ -160,11 +164,13 @@ cos sync
 | `help` | Show help for commands | `cos help new` |
 | `--help` | Command-specific help | `cos new --help` |
 
+> **Tip:** Just type `cos` with no arguments to see the full Rich-formatted command hub in your terminal.
+
 ---
 
 ## 🎨 Categories & Templates
 
-CreativeOS ships with 12 project categories, each with optimized templates:
+CreativeOS ships with 12+ project categories, each with an optimized folder structure:
 
 | Category | Icon | Template | Description |
 |----------|------|----------|-------------|
@@ -190,26 +196,26 @@ cos new "Project" -c Blog   # → Writing category
 
 ---
 
-## 🧠 Core Concepts
+## 🧠 Architecture
 
-### Hub-and-Spoke Architecture
+### Hub-and-Spoke Design
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        CreativeOS                                │
+│                         CreativeOS                              │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
-│  │ Projects │◄──►│  Vault   │◄──►│ Archive  │◄──►│ Shuttle  │  │
-│  │  (Hub)   │    │ (Notes)  │    │ (Cold)   │    │ (Mobile) │  │
-│  └──────────┘    └──────────┘    └──────────┘    └──────────┘  │
+│                                                                 │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐   │
+│  │ Projects │◄──►│  Vault   │◄──►│ Archive  │◄──►│ Shuttle  │   │
+│  │  (Hub)   │    │ (Notes)  │    │ (Cold)   │    │ (Mobile) │   │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘   │
 │       │                                                         │
 │       ▼                                                         │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                    Templates                              │  │
-│  │  Video │ Audio │ Design │ Photo │ Code │ Writing         │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    Templates                             │   │
+│  │  Video │ Audio │ Design │ Photo │ Code │ Writing         │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -218,9 +224,9 @@ cos new "Project" -c Blog   # → Writing category
 - **Archive Path** — Cold storage for completed projects
 - **Shuttle Path** — External drive for portable work
 
-### Project Metadata (`.project_meta.json`)
+### Project DNA (`.project_meta.json`)
 
-Every project has a metadata file that defines its "DNA":
+Every project carries a metadata file that defines its identity:
 
 ```json
 {
@@ -236,15 +242,15 @@ Every project has a metadata file that defines its "DNA":
 
 ### The 3-Level Up Rule
 
-Run commands from anywhere inside a project:
+Run commands from anywhere inside a project — CreativeOS walks up to find your project root:
 
 ```
-P:\Active\Video\2023_Nike_Ad\04_Exports\Social_Media\Revisions\
+C:\CreativeOS\01_Projects\Video\2026_Nike_Ad\04_Exports\Social_Media\Revisions\
          │
          │  cos export
          ▼
     Searches upward for .project_meta.json
-    Found at: P:\Active\Video\2023_Nike_Ad\
+    Found at: C:\CreativeOS\01_Projects\Video\2026_Nike_Ad\
 ```
 
 ---
@@ -332,7 +338,7 @@ CreativeOS v2.1.0 includes comprehensive security hardening:
 - **Path Boundary Checks** — Validates paths stay within trusted directories
 - **Secure File Permissions** — Restricts access to configuration files
 
-See [SECURITY.md](SECURITY.md) for details.
+See [SECURITY.md](SECURITY.md) for the full security policy.
 
 ---
 
@@ -340,7 +346,7 @@ See [SECURITY.md](SECURITY.md) for details.
 
 | Document | Description |
 |----------|-------------|
-| [USER MANUAL.md](USER%20MANUAL.md) | Comprehensive command reference |
+| [USER MANUAL.md](USER%20MANUAL.md) | Comprehensive command reference & advanced topics |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture and design decisions |
 | [CHANGELOG.md](CHANGELOG.md) | Version history and changes |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
@@ -395,7 +401,7 @@ CreativeOS/
 │   └── Templates/               # Project templates
 ├── pyproject.toml               # Package metadata
 ├── requirements.txt             # Dependencies
-└── README.md                    # This file
+└── README.md                    # You are here
 ```
 
 ---
@@ -406,7 +412,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
@@ -427,8 +433,8 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 <div align="center">
 
-**[⬆ Back to Top](#-creativeos)**
+**[⬆ Back to Top](#)**
 
-Made with ❤️ by Oluleke-Oke Goodness THE GOAT!
+Built with 🔥 by [Oluleke-Oke Goodness CEO J Star Films Studios](https://github.com/JStaRFilms)
 
 </div>

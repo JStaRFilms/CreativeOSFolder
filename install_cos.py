@@ -55,7 +55,7 @@ def create_template(name, structure):
     print(f"⚡ Created Template: {name}")
 
 def install():
-    print(f"🚀 Initializing CreativeOS at: {ROOT_DIR}")
+    print(f"🚀 Initializing CreativeOS — Your Creative Nervous System at: {ROOT_DIR}")
     
     # 1. Create Main Folders
     create_structure(ROOT_DIR, STRUCTURE)

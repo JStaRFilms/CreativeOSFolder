@@ -1,6 +1,6 @@
-# CreativeOS Architecture
+# CreativeOS — Architecture
 
-This document describes the architecture and design decisions behind CreativeOS.
+> **Your Creative Nervous System** · System design and engineering decisions
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ This document describes the architecture and design decisions behind CreativeOS.
 
 ## Overview
 
-CreativeOS is a command-line tool for managing creative projects. It provides:
+CreativeOS is a context-aware CLI that turns your file system into an intelligent project management system. It provides:
 
 - **Project scaffolding** from templates
 - **Bidirectional sync** with Obsidian vault

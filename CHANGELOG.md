@@ -1,4 +1,6 @@
-# Changelog
+# CreativeOS — Changelog
+
+> **Your Creative Nervous System** · Version history
 
 All notable changes to CreativeOS will be documented in this file.
 
