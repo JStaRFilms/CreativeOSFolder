@@ -1,13 +1,21 @@
 # --- IGNORE EVERYTHING ---
 # Ignore everything in the root by default to keep the repo clean
-*
+/*
 
 # --- ALLOWLIST (Resurrect these specific items) ---
-!00_System/
-!README.md
-!USER MANUAL.md
-!install_cos.py
-!.gitignore
+!/00_System/
+!/README.md
+!/USER MANUAL.md
+!/install_cos.py
+!/.gitignore
+!/pyproject.toml
+!/requirements.txt
+!/.python-version
+!/CHANGELOG.md
+!/CONTRIBUTING.md
+!/SECURITY.md
+!/ARCHITECTURE.md
+!/LICENSE
 
 # --- GLOBAL WRAPPERS (Ignore these everywhere, even in allowed folders) ---
 .DS_Store
@@ -17,3 +25,66 @@ Thumbs.db
 *.bak
 __pycache__/
 .tmp.driveupload/
+
+# --- Python ---
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+
+# --- Virtual Environments ---
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Testing ---
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- Jupyter ---
+.ipynb_checkpoints
+
+# --- pyenv ---
+# .python-version is in the allowlist
+# .python-version
+
+# --- CreativeOS Specific ---
+*.pyc
+00_System/Config/sync_state.json
+00_System/Config/error.log
+00_System/Config/creativeos.log

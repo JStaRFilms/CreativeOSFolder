@@ -1,22 +1,24 @@
-# CreativeOS
+# CreativeOS — User Manual
 
-CreativeOS is a comprehensive workflow management system designed to streamline project creation, organization, synchronization, and maintenance. It provides a command-line interface for handling various project types, integrating with tools like Git, and incorporating intelligent behaviors for efficient operations.
+> **Your Creative Nervous System** · v2.1.0
+
+CreativeOS is a context-aware CLI that transforms your file system into an intelligent project management system. It bridges your active projects, Obsidian vault, archives, and portable drives through a unified `cos` command interface.
 
 ## Installation and Configuration
 
 ### Installation
 
-CreativeOS is managed through a Python script that is executed via a batch file for convenience. To get started:
+CreativeOS requires **Python 3.10+** and is managed through the `cos` CLI. To get started:
 
-1. Ensure you have Python 3 installed on your system. You can download it from the official Python website if needed.
+1. Ensure you have [Python 3.10+](https://www.python.org/downloads/) installed on your system.
 
-2. Install the required dependencies. The script uses the `tqdm` library for progress bars. Install it using pip:
+2. Install the required dependencies. CreativeOS uses [Rich](https://github.com/Textualize/rich) for beautiful terminal output:
 
    ```
-   pip install tqdm
+   pip install -r requirements.txt
    ```
 
-3. The main script is run via the `cos.bat` batch file located in the `00_System/Scripts/` directory. This batch file simplifies execution on Windows systems.
+3. The CLI can be run via the `cos.bat` batch file located in the `00_System/Scripts/` directory, or installed as a package with `pip install -e .` for global `cos` access.
 
 ### Configuration
 

@@ -1,0 +1,25 @@
+{
+    "00_Notes": [
+        "Course_Outline.md",
+        "Script_Template.md",
+        "Resources.md"
+    ],
+    "01_Scripts": [],
+    "02_Footage": [
+        "Lessons",
+        "Screen_Recordings",
+        "B-Roll"
+    ],
+    "03_Assets": [
+        "Slides",
+        "Graphics",
+        "Music"
+    ],
+    "04_Exports": [
+        "Full_Course",
+        "Clips",
+        "Previews"
+    ],
+    "05_Marketing": [],
+    "99_Archive": []
+}

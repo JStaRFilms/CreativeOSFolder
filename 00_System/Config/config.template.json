@@ -1,0 +1,16 @@
+{
+    "_comment": "Copy this file to config.json and fill in your paths",
+    "_docs": "See README.md for detailed configuration instructions",
+    "root_path": "C:\\CreativeOS",
+    "projects_path": "C:\\CreativeOS\\01_Projects",
+    "exports_path": "C:\\CreativeOS\\02_Exports",
+    "templates_path": "C:\\CreativeOS\\00_System\\Templates",
+    "vault_path": "C:\\CreativeOS\\03_Vault",
+    "_downloads_comment": "Your browser's download folder (used by 'cos clean' command)",
+    "downloads_path": "C:\\Users\\YOUR_USERNAME\\Downloads",
+    "_shuttle_comment": "External drive for project transport (set to null if not using)",
+    "shuttle_path": "D:\\CreativeOS_Shuttle",
+    "_archive_comment": "Where completed projects are stored (set to null if not using)",
+    "archive_path": "D:\\Archive",
+    "version": "2.1.0"
+}

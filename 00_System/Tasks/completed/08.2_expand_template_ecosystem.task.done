@@ -1,0 +1,51 @@
+# Task Completion Summary
+
+**Task:** 08.2 Expand Template Ecosystem
+**Completed At:** 2026-02-25
+**Mode:** Code
+
+## Results
+
+Successfully expanded the CreativeOS template ecosystem by:
+1.  **Creating 6 new templates** in `00_System/Templates/`:
+    *   `design_project`
+    *   `photo_project`
+    *   `writing_project`
+    *   `podcast_project`
+    *   `client_project`
+    *   `course_project`
+2.  **Seeding starter content**: Each new template now includes a `00_Notes/` folder with a detailed `.md` brief containing variable tokens.
+3.  **Implementing Variable Substitution**: Updated `cos/commands/new.py` to:
+    *   Support new categories and map them to appropriate templates.
+    *   Implement `_apply_template_variables()` to replace `{{PROJECT_NAME}}`, `{{DATE}}`, `{{CLIENT}}`, and `{{TYPE}}` in all `.md` files within a new project.
+    *   Enhanced the project creation logic to copy reference files from the template directory if they exist (enabling rich starter files).
+4.  **Updating Documentation**: Refreshed the `Templates` section in `ARCHITECTURE.md` to show the full ecosystem and documented the newly supported template variables.
+
+## Files Created/Modified
+
+- `00_System/Templates/design_project/structure.json` (CREATE)
+- `00_System/Templates/design_project/00_Notes/Brief.md` (CREATE)
+- `00_System/Templates/photo_project/structure.json` (CREATE)
+- `00_System/Templates/photo_project/00_Notes/Brief.md` (CREATE)
+- `00_System/Templates/writing_project/structure.json` (CREATE)
+- `00_System/Templates/writing_project/00_Notes/Brief.md` (CREATE)
+- `00_System/Templates/podcast_project/structure.json` (CREATE)
+- `00_System/Templates/podcast_project/00_Notes/Episode_Brief.md` (CREATE)
+- `00_System/Templates/client_project/structure.json` (CREATE)
+- `00_System/Templates/client_project/00_Notes/Brief.md` (CREATE)
+- `00_System/Templates/course_project/structure.json` (CREATE)
+- `00_System/Templates/course_project/00_Notes/Course_Outline.md` (CREATE)
+- `cos/commands/new.py` (MODIFY)
+- `ARCHITECTURE.md` (MODIFY)
+
+## Verification Status
+
+- [x] Template folders exist: PASS
+- [x] Variable substitution test: PASS (verified with `design` category and `ACME Corp` client)
+- [x] No raw tokens remain in created project: PASS
+- [x] ARCHITECTURE.md updated: PASS
+
+## Notes
+
+- Added `--type` as an alias for `--category` in the `new` command for improved usability as per task instructions.
+- The `new` command now proactively creates category folders in `01_Projects/` (e.g., `Design/`, `Writing/`) if they do not already exist.

@@ -1,1 +1,3 @@
-@python "C:\CreativeOS\00_System\Scripts\manage.py" %*
+@echo off
+REM CreativeOS CLI Entry Point
+python "%~dp0manage.py" %*

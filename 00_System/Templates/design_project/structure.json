@@ -1,0 +1,26 @@
+{
+    "00_Notes": [
+        "Brief.md",
+        "Moodboard_Links.md",
+        "Feedback.md"
+    ],
+    "01_Assets": [
+        "Fonts",
+        "Icons",
+        "Photos",
+        "Brand_Refs"
+    ],
+    "02_Working_Files": [
+        "Figma",
+        "Illustrator",
+        "Photoshop",
+        "InDesign"
+    ],
+    "03_Exports": [
+        "Web",
+        "Print",
+        "Social"
+    ],
+    "04_Presentations": [],
+    "99_Archive": []
+}

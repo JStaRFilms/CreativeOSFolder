@@ -1,0 +1,23 @@
+{
+    "00_Notes": [
+        "Episode_Brief.md",
+        "Guest_Info.md",
+        "Questions.md"
+    ],
+    "01_Recordings": [
+        "Raw",
+        "Backup"
+    ],
+    "02_Editing": [],
+    "03_Assets": [
+        "Music",
+        "SFX",
+        "Artwork"
+    ],
+    "04_Exports": [
+        "MP3",
+        "WAV"
+    ],
+    "05_Show_Notes": [],
+    "99_Archive": []
+}

@@ -1,0 +1,27 @@
+# Task Completion Summary
+
+**Task:** 02.4 Delete Dead Code
+**Completed At:** 2026-02-25T13:10:00+01:00
+**Mode:** Code
+
+## Results
+
+Deleted the duplicate `manage (1).py` file and archived all isolated one-off migration scripts into `00_System/Scripts/_archive/migrations/`. 
+Also preserved `Link.txt` and verified that the `Scripts/` directory now only contains `manage.py`, `cos.bat`, `fix_metadata.py`, `Link.txt`, and `_archive/`.
+
+## Files Created/Modified
+
+- `00_System/Scripts/manage (1).py` (Deleted)
+- `00_System/Scripts/_archive/migrations/README.md` (Created)
+- `00_System/Scripts/_archive/migrations/*` (Moved 7 `.ps1` files)
+
+## Verification Status
+
+- [x] Delete duplicate: PASS
+- [x] Move to archive: PASS
+- [x] Link.txt preserved: PASS
+- [x] Clean scripts folder: PASS
+
+## Notes
+
+The Scripts folder is now cleanly separated. Active components remain at the root, while one-off automation scripts are archived.

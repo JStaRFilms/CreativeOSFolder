@@ -1,0 +1,27 @@
+# Task Completion Summary
+
+**Task:** 01.3_fix_powershell_injection
+**Completed At:** 2026-02-25T11:59:41+01:00
+**Mode:** Code
+
+## Results
+
+Fixed the command injection vulnerability in `fix_metadata.py` by:
+- Importing `base64` and rewriting `set_file_times` to use an encoded script.
+- Adding the `escape_ps_string` helper function to safely escape single quotes in strings.
+- Constructing the PowerShell payload using `-LiteralPath` for safety, and encoding the entire command into Base64 (UTF-16-LE) to prevent direct injection.
+
+## Files Created/Modified
+
+- `00_System/Scripts/fix_metadata.py` 
+
+## Verification Status
+
+- [x] TypeScript: N/A
+- [x] Lint: N/A
+- [x] Build: PASS (Python execution test)
+- [x] Tests: PASS (Manual verification of payload behavior against the escape logic)
+
+## Notes
+
+Testing dummy file creation with special characters (`"`) fails locally on Windows because the OS rejects `[Errno 22] Invalid argument` in filenames, but we explicitly tested the injection payloads inside `escape_ps_string()` along with direct `Write-Output` to the powershell base64 encoded payload process, successfully verifying that powershell handles the string literally and avoids executing injected commands.
