@@ -11,7 +11,9 @@ from . import __version__
 from .console import console
 from .config import SCRIPT_DIR
 from .commands import new, clone, init, sync, export, thumbs, clean, sort_exports, travel, resurrect
+from .commands import category, setup, config_cmd
 from .help_formatter import RichHelpAction, RichArgumentParser
+from .onboarding import is_first_run, run_onboarding_wizard, apply_configuration
 from rich.panel import Panel
 from rich.table import Table
 from rich import box
@@ -103,12 +105,24 @@ def show_help_overview() -> None:
     workflow.add_row("travel",    "Copy active project to shuttle drive",     "cos travel")
     workflow.add_row("resurrect", "Restore an archived project to active",   "cos resurrect my-film")
 
+    # ── Management commands ─────────────────────────────────────────────────────
+    management = Table(title="[bold]MANAGEMENT[/bold]", box=box.ROUNDED, border_style="yellow",
+                      show_header=True, header_style="bold magenta", padding=(0, 1))
+    management.add_column("Command", style="cyan bold", no_wrap=True)
+    management.add_column("Description", style="white")
+    management.add_column("Example", style="dim")
+    management.add_row("category",   "Manage project categories (list/add/edit/remove)", "cos category list")
+    management.add_row("setup",      "Configure CreativeOS (paths, categories, reset)", "cos setup")
+    management.add_row("config",     "View and edit configuration (show/paths/validate)", "cos config show")
+
     console.print()
     console.print(creation)
     console.print()
     console.print(maint)
     console.print()
     console.print(workflow)
+    console.print()
+    console.print(management)
 
     # ── Quick reference footer ────────────────────────────────────────────────
     console.print()
@@ -135,6 +149,20 @@ def show_help_overview() -> None:
 def main() -> None:
     """Main entry point for CreativeOS CLI."""
     sys.excepthook = handle_exception
+    
+    # First-run detection - check if setup or config command is being run
+    # Skip onboarding if user is trying to run setup or config commands
+    is_setup_cmd = len(sys.argv) > 1 and sys.argv[1] in ("setup", "config", "category")
+    
+    if is_first_run() and not is_setup_cmd:
+        console.print("[cyan]First run detected! Let's set up CreativeOS...[/cyan]\n")
+        config = run_onboarding_wizard(console)
+        if config:
+            apply_configuration(config)
+            console.print("\n[green]Setup complete! You're ready to use CreativeOS.[/green]\n")
+        else:
+            console.print("\n[yellow]Setup cancelled. Run 'cos setup' to configure later.[/yellow]\n")
+            sys.exit(0)
 
     # Intercept `cos` (no args) or `cos -h` / `cos --help` BEFORE argparse
     # so we can show the full Rich overview instead of the terse argparse output.
@@ -164,6 +192,7 @@ def main() -> None:
         parser_class=RichArgumentParser
     )
 
+    # Register all command parsers
     new.add_parser(subparsers)
     clone.add_parser(subparsers)
     init.add_parser(subparsers)
@@ -174,10 +203,15 @@ def main() -> None:
     sort_exports.add_parser(subparsers)
     travel.add_parser(subparsers)
     resurrect.add_parser(subparsers)
+    # New commands for category management and configuration
+    category.add_parser(subparsers)
+    setup.add_parser(subparsers)
+    config_cmd.add_parser(subparsers)
 
     args = parser.parse_args()
     args.category_flag_passed = "-c" in sys.argv or "--category" in sys.argv
 
+    # Route commands to their handlers
     if args.command == "new":             new.cmd_new(args)
     elif args.command == "clone":         clone.cmd_clone(args)
     elif args.command == "init":          init.cmd_init(args)
@@ -188,6 +222,9 @@ def main() -> None:
     elif args.command == "sort-exports":  sort_exports.cmd_sort_exports(args)
     elif args.command == "travel":        travel.cmd_travel(args)
     elif args.command == "resurrect":     resurrect.cmd_resurrect(args)
+    elif args.command == "category":      category.cmd_category(args)
+    elif args.command == "setup":         setup.cmd_setup(args)
+    elif args.command == "config":        config_cmd.cmd_config(args)
     else:
         show_help_overview()
 

@@ -14,6 +14,16 @@ from ..console import console
 from ..security import sanitize_path_input, validate_project_name, validate_client_name, validate_date
 from ..git_utils import setup_git
 from ..file_utils import get_date_slug, format_path
+from ..category_config import (
+    get_enabled_category_names,
+    get_category,
+    get_category_template,
+    get_category_folder,
+    get_default_category,
+    get_simple_template,
+    resolve_category_name,
+    category_exists,
+)
 
 import datetime
 from pathlib import Path
@@ -49,15 +59,24 @@ def _apply_template_variables(target_dir: str, name: str, category: str, client:
             logger.warning(f"Could not apply variables to {md_file}: {e}")
 
 def validate_category(val: str) -> str:
-    """Normalize and validate category input to be case-insensitive."""
-    valid_choices = ["Video", "Code", "Web", "AI", "Music", "Audio", "Design", "Photo", "Writing", "Podcast", "Client", "Course"]
-    mapping = {c.lower(): c for c in valid_choices}
-    if val.lower() in mapping:
-        return mapping[val.lower()]
-    return val # Will be caught by argparse choices validation
+    """Normalize and validate category input to be case-insensitive.
+    
+    Uses dynamic categories from categories.json configuration.
+    Falls back to the input value if not found (for custom categories).
+    """
+    # Resolve category name (handles aliases too)
+    resolved = resolve_category_name(val)
+    if category_exists(val):
+        return resolved
+    # Return the value as-is for custom categories
+    return val
 
 def add_parser(subparsers: Any) -> None:
     from ..help_formatter import RichHelpAction
+    
+    # Get dynamic categories for choices
+    category_choices = get_enabled_category_names()
+    default_category = get_default_category()
 
     p_new = subparsers.add_parser(
         "new",
@@ -81,16 +100,7 @@ Examples:
   cos new "Client Work" --client Acme    Create project inside Clients/Acme/
   cos new "Retro Cut" -d 2025-12-01      Create project backdated to 2025-12-01
 
-Templates:
-  Video    -> video_project   (00_Notes, 01_Footage, 02_Audio, 03_Exports, 99_Archive)
-  Design   -> design_project  (00_Notes, 01_Assets, 02_Working, 03_Exports, 04_Pres)
-  Writing  -> writing_project (00_Notes, 01_Drafts, 02_Edits, 03_Final, 05_Refs)
-  Photo    -> photo_project   (00_Notes, 01_RAW, 02_Selects, 03_Edits, 04_Exports)
-  Podcast  -> podcast_project (00_Notes, 01_Recordings, 02_Editing, 03_Assets)
-  Audio    -> audio_project   (00_Notes, 01_Project, 02_Stems, 03_Exports, 04_Samples)
-  Code     -> plain_code      (00_Notes, 01_Source, 02_Build, 03_Docs)
-  Course   -> course_project  (00_Notes, 01_Scripts, 02_Footage, 03_Assets, 04_Exports)
-  AI       -> ai_project      (00_Notes, 01_Data, 02_Models, 03_Notebooks, 04_Exports)\
+Use 'cos category list' to see all available categories and their templates.\
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
@@ -104,9 +114,9 @@ Templates:
     p_new.add_argument(
         "-c", "--category", "--type",
         type=validate_category,
-        default="Video",
-        choices=["Video", "Code", "Web", "AI", "Music", "Audio", "Design", "Photo", "Writing", "Podcast", "Client", "Course"],
-        help="Project category — determines the folder template used.  (default: Video)",
+        default=default_category,
+        choices=category_choices,
+        help=f"Project category — determines the folder template used.  (default: {default_category})",
     )
     p_new.add_argument(
         "-s", "--simple",
@@ -165,16 +175,8 @@ def cmd_new(args: argparse.Namespace) -> None:
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        cat_lower = category.lower()
-        if cat_lower in ["web", "code"]: phys_cat = "Code"
-        elif cat_lower in ["music", "audio", "podcast"]: phys_cat = "Music"
-        elif cat_lower == "ai": phys_cat = "AI"
-        elif cat_lower == "design": phys_cat = "Design"
-        elif cat_lower == "photo": phys_cat = "Photo"
-        elif cat_lower == "writing": phys_cat = "Writing"
-        elif cat_lower == "course": phys_cat = "Course"
-        elif cat_lower == "client": phys_cat = "Clients"
-        else: phys_cat = "Video"
+        # Use dynamic category folder from configuration
+        phys_cat = get_category_folder(category)
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
 
     if not os.path.exists(target_root):
@@ -196,19 +198,11 @@ def cmd_new(args: argparse.Namespace) -> None:
         console.print(f"[warning]⚠️  Project already exists: {target_dir}[/warning]")
         return
 
-    cat_lower = category.lower()
-    if args.simple: template_name = "simple"
-    elif cat_lower == "code": template_name = "plain_code"
-    elif cat_lower == "web": template_name = "code_project"
-    elif cat_lower in ["audio", "music"]: template_name = "audio_project"
-    elif cat_lower == "ai": template_name = "ai_project"
-    elif cat_lower == "design": template_name = "design_project"
-    elif cat_lower == "photo": template_name = "photo_project"
-    elif cat_lower == "writing": template_name = "writing_project"
-    elif cat_lower == "podcast": template_name = "podcast_project"
-    elif cat_lower == "client": template_name = "client_project"
-    elif cat_lower == "course": template_name = "course_project"
-    else: template_name = "video_project"
+    # Use dynamic template from configuration
+    if args.simple:
+        template_name = get_simple_template()
+    else:
+        template_name = get_category_template(category)
 
     template_dir = os.path.join(TEMPLATES_PATH, template_name)
     template_file = os.path.join(template_dir, "structure.json")

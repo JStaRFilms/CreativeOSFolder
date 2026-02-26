@@ -14,9 +14,20 @@ from ..config import PROJECTS_PATH, CONFIG_PERMISSIONS, logger
 from ..console import console
 from ..security import sanitize_path_input, validate_project_name, validate_client_name, validate_date, validate_git_url
 from ..file_utils import get_date_slug, format_path
+from ..category_config import (
+    get_enabled_category_names,
+    get_category_folder,
+    get_default_category,
+    resolve_category_name,
+    category_exists,
+)
 
 def add_parser(subparsers: Any) -> None:
     from ..help_formatter import RichHelpAction
+    
+    # Get dynamic categories for choices
+    category_choices = get_enabled_category_names()
+    default_category = get_default_category()
 
     p_clone = subparsers.add_parser(
         "clone",
@@ -54,8 +65,8 @@ Examples:
     p_clone.add_argument(
         "-c", "--category",
         type=str,
-        default="Video",
-        choices=["Video", "Code", "Web", "AI", "Music", "Audio"],
+        default="Code",  # Default to Code for clone operations
+        choices=category_choices,
         help="Project category that determines the target folder.  (default: Code for clone)",
     )
     p_clone.add_argument(
@@ -99,9 +110,8 @@ def cmd_clone(args: argparse.Namespace) -> None:
         console.print(f"[error]❌ Invalid project name: {e}[/error]")
         return
 
-    category = args.category.title()
-    if category == "Video" and getattr(args, "category_flag_passed", False) is False:
-        category = "Code"
+    # Resolve category name using dynamic configuration
+    category = resolve_category_name(args.category)
 
     date_prefix = get_date_slug(args.date)
     safe_name = project_name.replace(" ", "_")
@@ -122,10 +132,8 @@ def cmd_clone(args: argparse.Namespace) -> None:
     elif cwd.startswith(PROJECTS_PATH):
         target_root = cwd
     else:
-        if category.lower() in ["web", "code"]: phys_cat = "Code"
-        elif category.lower() in ["music", "audio"]: phys_cat = "Music"
-        elif category.lower() == "ai": phys_cat = "AI"
-        else: phys_cat = "Video"
+        # Use dynamic category folder from configuration
+        phys_cat = get_category_folder(category)
         target_root = os.path.join(PROJECTS_PATH, phys_cat)
 
     target_dir = os.path.join(target_root, slug)
