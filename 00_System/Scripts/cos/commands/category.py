@@ -275,7 +275,7 @@ def cmd_category_add(args: argparse.Namespace) -> None:
             # Create structure.json
             structure = {folder: [] for folder in new_cat["folder_structure"]}
             with open(template_path / "structure.json", "w", encoding="utf-8") as f:
-                json.dump(structure, f, indent=2)
+                json.dump(structure, f, indent=2, ensure_ascii=False)
             
             # Create 00_Notes with Idea.md
             notes_dir = template_path / "00_Notes"
