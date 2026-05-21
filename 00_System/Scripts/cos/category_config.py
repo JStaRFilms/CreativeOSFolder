@@ -172,7 +172,7 @@ def save_categories(config: Dict[str, Any]) -> bool:
         os.makedirs(os.path.dirname(CATEGORIES_PATH), exist_ok=True)
         
         with open(CATEGORIES_PATH, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
+            json.dump(config, f, indent=2, ensure_ascii=False)
         
         logger.debug("Saved categories configuration")
         return True
