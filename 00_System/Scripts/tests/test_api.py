@@ -175,6 +175,34 @@ def test_fs_open_endpoint(client, temp_projects_dir, monkeypatch):
     assert resp_outside.status_code == 403
 
 
+def test_fs_raw_and_content_endpoints(client, temp_projects_dir, monkeypatch):
+    monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.api.PROJECTS_PATH", str(temp_projects_dir))
+
+    # Test file
+    test_doc = temp_projects_dir / "Notes.md"
+    test_doc.write_text("# Project Notes\n- Task 1\n- Task 2", encoding="utf-8")
+
+    # Raw file endpoint
+    raw_resp = client.get(f"/api/fs/raw?path={test_doc}")
+    assert raw_resp.status_code == 200
+    assert b"# Project Notes" in raw_resp.content
+
+    # Content endpoint
+    content_resp = client.get(f"/api/fs/content?path={test_doc}")
+    assert content_resp.status_code == 200
+    data = content_resp.json()
+    assert data["name"] == "Notes.md"
+    assert data["type"] == "md"
+    assert "# Project Notes" in data["content"]
+    assert data["lines"] == 3
+
+    # Forbidden path check
+    forbidden_raw = client.get("/api/fs/raw?path=C:/Windows/notepad.exe")
+    assert forbidden_raw.status_code == 403
+
+
+
 def test_update_project_metadata(client, temp_projects_dir, monkeypatch):
     monkeypatch.setattr("cos.commands.new.PROJECTS_PATH", str(temp_projects_dir))
     monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))

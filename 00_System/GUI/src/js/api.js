@@ -175,12 +175,14 @@ export const api = {
     return res;
   },
 
-  // File Explorer
+  // File Explorer & Media Preview
   listFiles: (path = "") => request(`/fs/list${path ? `?path=${encodeURIComponent(path)}` : ""}`),
   openPath: (path) => request("/fs/open", {
     method: "POST",
     body: JSON.stringify({ path }),
   }),
+  getRawFileUrl: (path) => `/api/fs/raw?path=${encodeURIComponent(path)}`,
+  getFileContent: (path, maxBytes = 500000) => request(`/fs/content?path=${encodeURIComponent(path)}&max_bytes=${maxBytes}`),
 
   // Storage
   getStorage: () => request("/storage"),

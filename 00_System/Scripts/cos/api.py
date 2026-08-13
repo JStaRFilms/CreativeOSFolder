@@ -647,6 +647,75 @@ def open_fs_path(req: OpenPathRequest) -> dict[str, Any]:
         ) from e
 
 
+def _resolve_file_target(path: str) -> Path:
+    """Helper to resolve and validate a file path strictly within allowed boundaries."""
+    if not path or path.strip() in ("", "."):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Path parameter is required")
+    p_str = path.strip()
+    p = Path(p_str)
+    if p.is_absolute():
+        target = p.resolve()
+    else:
+        candidate1 = (Path(PROJECTS_PATH) / p).resolve()
+        candidate2 = (Path(ROOT_PATH) / p).resolve()
+        if candidate1.exists():
+            target = candidate1
+        elif candidate2.exists():
+            target = candidate2
+        else:
+            target = candidate1
+
+    target = _check_path_allowed(target)
+    if not target.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Path not found: {path}")
+    return target
+
+
+@app.get("/api/fs/raw")
+def get_fs_raw(path: str) -> FileResponse:
+    """Serve raw file content for media streaming (video/audio) and image preview."""
+    target = _resolve_file_target(path)
+    if not target.is_file():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Target is not a file: {path}")
+    return FileResponse(target)
+
+
+@app.get("/api/fs/content")
+def get_fs_content(path: str, max_bytes: int = 1_000_000) -> dict[str, Any]:
+    """Retrieve text/markdown/json/code content for inline previewing."""
+    target = _resolve_file_target(path)
+    if not target.is_file():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Target is not a file: {path}")
+
+    stat_res = target.stat()
+    size = stat_res.st_size
+    mtime_iso = datetime.datetime.fromtimestamp(stat_res.st_mtime).isoformat()
+
+    try:
+        if size > max_bytes:
+            with open(target, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read(max_bytes)
+            truncated = True
+        else:
+            with open(target, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            truncated = False
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Could not read text content: {e}")
+
+    return {
+        "path": str(target),
+        "name": target.name,
+        "size": size,
+        "type": target.suffix.lower().lstrip(".") or "txt",
+        "extension": target.suffix.lower(),
+        "modified": mtime_iso,
+        "content": content,
+        "lines": content.count("\n") + 1 if content else 0,
+        "truncated": truncated,
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Travel, Archive & Resurrect Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
