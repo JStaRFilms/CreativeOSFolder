@@ -194,69 +194,112 @@ def sync_two_folders(dir_a: str, dir_b: str, prev_state: Optional[SyncState] = N
     
     return logs, new_state
 
+def run_sync(
+    projects_path: str | None = None,
+    vault_path: str | None = None,
+) -> dict[str, Any]:
+    """Execute bidirectional note sync between projects and Obsidian vault.
+    
+    Returns:
+        dict with projects_synced, total_changes, logs, and timestamp.
+    """
+    proj_root = projects_path or PROJECTS_PATH
+    vault_root = vault_path or VAULT_PATH
+    vault_projects_dir = os.path.join(vault_root, "01_Active_Projects")
+    if not os.path.exists(vault_projects_dir):
+        os.makedirs(vault_projects_dir, exist_ok=True)
+
+    prev_sync_state = load_sync_state()
+    new_sync_state: SyncState = {}
+    all_logs: list[dict[str, Any]] = []
+    total_changes = 0
+    projects_synced = 0
+
+    for root, dirs, files in os.walk(proj_root, topdown=True):
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+
+        if ".project_meta.json" in files:
+            meta_path = os.path.join(root, ".project_meta.json")
+            try:
+                with open(meta_path, "r", encoding="utf-8-sig") as f:
+                    meta = json.load(f)
+            except Exception:
+                continue
+
+            project_name = meta.get("slug", "Unknown")
+            notes_project = os.path.join(root, "00_Notes")
+            notes_vault = os.path.join(vault_projects_dir, project_name)
+
+            project_prev_state = prev_sync_state.get("projects", {}).get(project_name, {}).get("files", {})
+
+            logs, project_state = sync_two_folders(notes_project, notes_vault, project_prev_state)
+
+            if project_state:
+                if "projects" not in new_sync_state:
+                    new_sync_state["projects"] = {}
+                new_sync_state["projects"][project_name] = {
+                    "files": project_state,
+                    "last_sync": datetime.datetime.now().isoformat(),
+                }
+
+            projects_synced += 1
+
+            for log in logs:
+                log_entry = {
+                    "project": project_name,
+                    "type": log.get("type", "unknown"),
+                    "file": log.get("file", ""),
+                    "msg": log.get("msg", ""),
+                }
+                all_logs.append(log_entry)
+                total_changes += 1
+
+    sync_timestamp = datetime.datetime.now().isoformat()
+    new_sync_state["last_full_sync"] = sync_timestamp
+    save_sync_state(new_sync_state)
+
+    logger.info(f"Sync complete: {total_changes} operations across {projects_synced} projects")
+    return {
+        "projects_synced": projects_synced,
+        "total_changes": total_changes,
+        "logs": all_logs,
+        "last_sync": sync_timestamp,
+    }
+
+
 def cmd_sync(args: argparse.Namespace) -> None:
     """Sync Notes between Projects and Obsidian Vault."""
     logger.info("Starting sync operation")
     console.rule("[bold purple]Syncing CreativeOS Brain")
-    vault_projects_dir = os.path.join(VAULT_PATH, "01_Active_Projects")
-    if not os.path.exists(vault_projects_dir): os.makedirs(vault_projects_dir)
 
     changes_table = Table(show_header=True, header_style="bold magenta", box=box.SIMPLE)
     changes_table.add_column("Project", style="cyan")
     changes_table.add_column("Action", style="white")
     changes_table.add_column("File", style="dim")
 
-    total_changes = 0
-    projects_synced = 0
-    
-    prev_sync_state = load_sync_state()
-    new_sync_state = {}
-    
     with console.status("[bold cyan]Syncing Notes...[/bold cyan]"):
-        for root, dirs, files in os.walk(PROJECTS_PATH, topdown=True):
-            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
-            
-            if ".project_meta.json" in files:
-                meta_path = os.path.join(root, ".project_meta.json")
-                try:
-                    with open(meta_path, "r", encoding="utf-8-sig") as f: meta = json.load(f)
-                except: continue
-                
-                project_name = meta.get("slug", "Unknown")
-                notes_project = os.path.join(root, "00_Notes")
-                notes_vault = os.path.join(vault_projects_dir, project_name)
-                
-                project_prev_state = prev_sync_state.get("projects", {}).get(project_name, {}).get("files", {})
+        result = run_sync()
 
-                logs, project_state = sync_two_folders(notes_project, notes_vault, project_prev_state)
-                
-                if project_state:
-                    if "projects" not in new_sync_state:
-                        new_sync_state["projects"] = {}
-                    new_sync_state["projects"][project_name] = {
-                        "files": project_state,
-                        "last_sync": datetime.datetime.now().isoformat()
-                    }
-                
-                projects_synced += 1
-                
-                for log in logs:
-                    symbol = "✅"
-                    if log["type"] == "push": symbol = "→ [green]Push[/green]"
-                    elif log["type"] == "pull": symbol = "← [blue]Pull[/blue]"
-                    elif log["type"] == "error": symbol = "❌ [red]Error[/red]"
-                    elif log["type"] == "conflict": symbol = "⚠️ [yellow]Conflict[/yellow]"
-                    
-                    changes_table.add_row(project_name, symbol, log["file"])
-                    total_changes += 1
+    for log in result["logs"]:
+        symbol = "✅"
+        if log["type"] == "push":
+            symbol = "→ [green]Push[/green]"
+        elif log["type"] == "pull":
+            symbol = "← [blue]Pull[/blue]"
+        elif log["type"] == "error":
+            symbol = "❌ [red]Error[/red]"
+        elif log["type"] == "conflict":
+            symbol = "⚠️ [yellow]Conflict[/yellow]"
+        elif log["type"] == "update_vault":
+            symbol = "→ [green]Update Vault[/green]"
+        elif log["type"] == "update_project":
+            symbol = "← [blue]Update Project[/blue]"
 
-    new_sync_state["last_full_sync"] = datetime.datetime.now().isoformat()
-    save_sync_state(new_sync_state)
+        changes_table.add_row(log["project"], symbol, log["file"])
 
-    if total_changes == 0:
-        console.print(f"[success]✅ Everything is up to date. ({projects_synced} projects scanned)[/success]")
+    if result["total_changes"] == 0:
+        console.print(f"[success]✅ Everything is up to date. ({result['projects_synced']} projects scanned)[/success]")
     else:
         console.print(changes_table)
-        console.print(f"[success]✨ Sync Complete. {total_changes} operations across {projects_synced} projects.[/success]")
+        console.print(f"[success]✨ Sync Complete. {result['total_changes']} operations across {result['projects_synced']} projects.[/success]")
 
-    logger.info(f"Sync complete: {total_changes} operations across {projects_synced} projects")

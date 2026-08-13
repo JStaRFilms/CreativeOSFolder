@@ -11,7 +11,7 @@ from . import __version__
 from .console import console
 from .config import SCRIPT_DIR
 from .commands import new, clone, init, sync, export, thumbs, clean, sort_exports, travel, resurrect, storage
-from .commands import category, setup, config_cmd
+from .commands import category, setup, config_cmd, gui
 from .help_formatter import RichHelpAction, RichArgumentParser
 from .onboarding import is_first_run, run_onboarding_wizard, apply_configuration
 from rich.panel import Panel
@@ -113,6 +113,7 @@ def show_help_overview() -> None:
     management.add_column("Command", style="cyan bold", no_wrap=True)
     management.add_column("Description", style="white")
     management.add_column("Example", style="dim")
+    management.add_row("gui",        "Launch CreativeOS Web GUI in browser", "cos gui")
     management.add_row("category",   "Manage project categories (list/add/edit/remove)", "cos category list")
     management.add_row("setup",      "Configure CreativeOS (paths, categories, reset)", "cos setup")
     management.add_row("config",     "View and edit configuration (show/paths/validate)", "cos config show")
@@ -239,6 +240,7 @@ def main() -> None:
     resurrect.add_parser(subparsers)
     storage.add_parser(subparsers)
     # New commands for category management and configuration
+    gui.add_parser(subparsers)
     category.add_parser(subparsers)
     setup.add_parser(subparsers)
     config_cmd.add_parser(subparsers)
@@ -258,6 +260,7 @@ def main() -> None:
     elif args.command == "travel":        travel.cmd_travel(args)
     elif args.command == "resurrect":     resurrect.cmd_resurrect(args)
     elif args.command == "storage":       storage.cmd_storage(args)
+    elif args.command == "gui":           gui.cmd_gui(args)
     elif args.command == "category":      category.cmd_category(args)
     elif args.command == "setup":         setup.cmd_setup(args)
     elif args.command == "config":        config_cmd.cmd_config(args)

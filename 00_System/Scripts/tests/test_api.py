@@ -1,0 +1,131 @@
+"""Tests for the CreativeOS FastAPI backend."""
+
+import pytest
+from starlette.testclient import TestClient
+from cos.api import app
+
+
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+
+def test_health_endpoint(client):
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "version" in data
+    assert "projects_path" in data
+
+
+def test_categories_endpoint(client):
+    response = client.get("/api/categories")
+    assert response.status_code == 200
+    data = response.json()
+    assert "categories" in data
+    assert "enabled" in data
+    assert "default_category" in data
+    assert "Video" in data["categories"]
+
+
+def test_config_endpoint(client):
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert "config" in data
+    assert "paths" in data
+    assert "version" in data
+
+
+def test_projects_endpoint(client):
+    response = client.get("/api/projects")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    for proj in data:
+        assert "name" in proj
+        assert "icon" in proj
+        assert "status" in proj
+
+
+def test_storage_endpoint(client):
+    response = client.get("/api/storage")
+    assert response.status_code == 200
+    data = response.json()
+    assert "project_count" in data
+    assert "total_size" in data
+    assert "projects" in data
+
+
+def test_create_project_and_validation(client, temp_projects_dir, monkeypatch):
+    monkeypatch.setattr("cos.commands.new.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.api.PROJECTS_PATH", str(temp_projects_dir))
+
+    # Test invalid project name with invalid chars
+    invalid_resp = client.post("/api/projects", json={
+        "name": "Invalid/Project/Name",
+        "category": "Video",
+    })
+    assert invalid_resp.status_code == 400
+
+    # Test valid project creation
+    valid_resp = client.post("/api/projects", json={
+        "name": "GUI Test Project",
+        "category": "Video",
+        "client": "TestClient",
+        "simple": True,
+    })
+    assert valid_resp.status_code == 201
+    created_data = valid_resp.json()
+    assert created_data["status"] == "success"
+    assert created_data["project"]["name"] == "GUI Test Project"
+    assert created_data["project"]["client"] == "TestClient"
+
+    # Test duplicate creation returns 409
+    dup_resp = client.post("/api/projects", json={
+        "name": "GUI Test Project",
+        "category": "Video",
+        "client": "TestClient",
+        "simple": True,
+    })
+    assert dup_resp.status_code == 409
+
+
+def test_storage_refresh_endpoint(client, temp_projects_dir, temp_dir, monkeypatch):
+    test_index = temp_dir / "storage_index.json"
+    monkeypatch.setattr("cos.storage.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.api.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.storage.STORAGE_INDEX_PATH", str(test_index))
+
+    response = client.post("/api/storage/refresh")
+    assert response.status_code == 200
+    data = response.json()
+    assert "project_count" in data
+    assert "total_size" in data
+
+
+
+def test_sync_endpoint(client, temp_projects_dir, temp_dir, monkeypatch):
+    vault_dir = temp_dir / "vault"
+    vault_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("cos.commands.sync.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.commands.sync.VAULT_PATH", str(vault_dir))
+    monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.config.VAULT_PATH", str(vault_dir))
+
+    response = client.post("/api/sync")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "projects_synced" in data
+    assert "total_changes" in data
+
+
+def test_spa_root_serving(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "CreativeOS" in response.text
+

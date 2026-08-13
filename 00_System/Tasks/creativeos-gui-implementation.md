@@ -26,28 +26,28 @@
 ## 🏗️ Implementation Plan
 
 ### Phase 1: Backend API Wrapper
-- [ ] Add `fastapi>=0.100.0` and `uvicorn[standard]>=0.20.0` to `requirements.txt`
-- [ ] Create `00_System/Scripts/cos/api.py` with FastAPI endpoints (`/api/projects`, `/api/storage`, `/api/config`, `/api/sync`, `/api/categories`) mapping to existing `cos` functions.
-- [ ] Create `00_System/Scripts/cos/commands/gui.py` to start uvicorn and open the browser.
-- [ ] Update `00_System/Scripts/cos/cli.py` to register the new `gui` command.
+- [x] Add `fastapi>=0.100.0` and `uvicorn[standard]>=0.20.0` to `requirements.txt`
+- [x] Create `00_System/Scripts/cos/api.py` with FastAPI endpoints (`/api/projects`, `/api/storage`, `/api/config`, `/api/sync`, `/api/categories`) mapping to existing `cos` functions.
+- [x] Create `00_System/Scripts/cos/commands/gui.py` to start uvicorn and open the browser.
+- [x] Update `00_System/Scripts/cos/cli.py` to register the new `gui` command.
 
 ### Phase 2: Frontend Setup & UI Tokens
-- [ ] Initialize Vite project in `00_System/GUI` (`npx -y create-vite@latest ./ --template vanilla`)
-- [ ] Create CSS variables in `tokens.css` for Light and Dark modes.
-- [ ] Setup proxy in `vite.config.js` to point `/api` to `localhost:8787` for development.
+- [x] Initialize Vite project in `00_System/GUI` (`npx -y create-vite@latest ./ --template vanilla`)
+- [x] Create CSS variables in `tokens.css` for Light and Dark modes.
+- [x] Setup proxy in `vite.config.js` to point `/api` to `localhost:8787` for development.
 
 ### Phase 3: Core Views Implementation
-- [ ] Build `index.html` (App Shell & Navigation).
-- [ ] Implement Dashboard view (`dashboard.js` & `project-card.js`).
-- [ ] Implement Storage Review view (`storage.js` & `table.js`).
-- [ ] Implement New Project form (`new-project.js`).
-- [ ] Implement Settings view (`settings.js`).
+- [x] Build `index.html` (App Shell & Navigation).
+- [x] Implement Dashboard view (`dashboard.js` & `project-card.js`).
+- [x] Implement Storage Review view (`storage.js` & `table.js`).
+- [x] Implement New Project form (`new-project.js`).
+- [x] Implement Settings view (`settings.js`).
 
 ### Phase 4: PWA & Integration
-- [ ] Add `public/manifest.json` and a basic `public/sw.js` for PWA installation.
-- [ ] Run `npm run build` in `00_System/GUI` to generate the `dist` folder.
-- [ ] Update `api.py` to mount and serve the built static files from `00_System/GUI/dist/` at the root `/` path.
-- [ ] Test the full `cos gui` flow (backend + frontend).
+- [x] Add `public/manifest.json` and a basic `public/sw.js` for PWA installation.
+- [x] Run `npm run build` in `00_System/GUI` to generate the `dist` folder.
+- [x] Update `api.py` to mount and serve the built static files from `00_System/GUI/dist/` at the root `/` path.
+- [x] Test the full `cos gui` flow (backend + frontend).
 
 ---
 
@@ -67,20 +67,20 @@
 ## ✅ Success Criteria
 
 ### Code Quality
-- [ ] Backend avoids duplicating logic (uses existing `cos` modules).
-- [ ] Frontend uses clean, modular JS structure.
-- [ ] No unnecessary dependencies introduced.
+- [x] Backend avoids duplicating logic (uses existing `cos` modules).
+- [x] Frontend uses clean, modular JS structure.
+- [x] No unnecessary dependencies introduced.
 
 ### Performance
-- [ ] FastAPI server starts in under 1 second.
-- [ ] Frontend is extremely lightweight and fast to render.
+- [x] FastAPI server starts in under 1 second.
+- [x] Frontend is extremely lightweight and fast to render.
 
 ### Functionality
-- [ ] Running `cos gui` successfully opens the dashboard in the browser.
-- [ ] Data correctly populates from the file system.
-- [ ] Creating a project via GUI works end-to-end.
-- [ ] Dark mode toggle works seamlessly.
-- [ ] App is installable via Chrome PWA feature.
+- [x] Running `cos gui` successfully opens the dashboard in the browser.
+- [x] Data correctly populates from the file system.
+- [x] Creating a project via GUI works end-to-end.
+- [x] Dark mode toggle works seamlessly.
+- [x] App is installable via Chrome PWA feature.
 
 ---
 

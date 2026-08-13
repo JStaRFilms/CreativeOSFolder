@@ -89,3 +89,5 @@ coverage.xml
 00_System/Config/storage_index.json
 00_System/Config/error.log
 00_System/Config/creativeos.log
+
+00_System/GUI/node_modules/

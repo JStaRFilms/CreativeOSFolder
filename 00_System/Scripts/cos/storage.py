@@ -163,7 +163,7 @@ def inspect_project(
         "name": metadata.get("name") or project.name,
         "type": metadata.get("type") or "Unknown",
         "path": str(project),
-        "relative_path": str(project.relative_to(Path(projects_path or PROJECTS_PATH))),
+        "relative_path": project.relative_to(Path(projects_path or PROJECTS_PATH)).as_posix(),
         "created": created,
         "created_source": created_source,
         "last_meaningful_update": _iso(meaningful_latest) if meaningful_latest else None,
@@ -228,8 +228,11 @@ def build_storage_index(projects_path: str | Path | None = None) -> dict[str, An
     }
 
 
-def load_storage_index(index_path: str | Path | None = None) -> dict[str, Any] | None:
-    """Load the prior inventory, returning ``None`` if it is absent or invalid."""
+def load_storage_index(
+    index_path: str | Path | None = None,
+    projects_path: str | Path | None = None,
+) -> dict[str, Any] | None:
+    """Load the prior inventory, returning ``None`` if it is absent, invalid, or mismatched."""
     path = Path(index_path or STORAGE_INDEX_PATH)
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
@@ -239,7 +242,22 @@ def load_storage_index(index_path: str | Path | None = None) -> dict[str, Any] |
         return None
     if not isinstance(loaded.get("projects"), list):
         return None
+    
+    # Only validate projects_path match if caller explicitly provided projects_path,
+    # or if using the default global storage index.
+    if index_path is None or projects_path is not None:
+        expected_root = str(Path(projects_path or PROJECTS_PATH).resolve())
+        cached_root = loaded.get("projects_path")
+        if cached_root:
+            try:
+                if str(Path(cached_root).resolve()) != expected_root:
+                    return None
+            except Exception:
+                return None
+
     return loaded
+
+
 
 
 def save_storage_index(index: dict[str, Any], index_path: str | Path | None = None) -> Path:
