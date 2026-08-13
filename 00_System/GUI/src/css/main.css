@@ -897,21 +897,33 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 0.95rem;
   background-color: var(--bg-surface-elevated);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-modal);
   color: var(--text-primary);
   font-size: 0.825rem;
-  min-width: 260px;
+  font-weight: 500;
+  min-width: 240px;
   max-width: 380px;
   animation: slideIn 0.18s ease-out;
 }
 
-.toast.toast-success { border-left: 3px solid var(--color-success); }
-.toast.toast-error { border-left: 3px solid var(--color-danger); }
-.toast.toast-info { border-left: 3px solid var(--color-primary); }
+.toast-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.toast-icon-wrap.type-success { color: var(--color-success); }
+.toast-icon-wrap.type-error { color: var(--color-danger); }
+.toast-icon-wrap.type-info { color: var(--text-primary); }
 
 @keyframes slideIn {
   from { transform: translateY(12px); opacity: 0; }

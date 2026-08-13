@@ -3,12 +3,13 @@
  */
 
 import { api } from "../api.js";
+import { getCategoryIconSvg, icons } from "../icons.js";
 import { showToast } from "../components/toast.js";
 
 export async function renderNewProject(container) {
   container.innerHTML = `
     <div class="form-container">
-      <div class="page-header" style="justify-content: center; text-align: center; margin-bottom: 2rem;">
+      <div class="page-header" style="justify-content: center; text-align: center; margin-bottom: 1.75rem;">
         <div>
           <div class="page-eyebrow" style="justify-content: center;">
             <span>SCAFFOLD WORKSPACE</span>
@@ -36,7 +37,7 @@ export async function renderNewProject(container) {
               <div class="form-group">
                 <label class="form-label" for="project-category">Category Blueprint</label>
                 <select id="project-category" class="form-select">
-                  <option value="Video">🎬 Video — Video production projects</option>
+                  <option value="Video">Video — Video production projects</option>
                 </select>
               </div>
 
@@ -66,8 +67,8 @@ export async function renderNewProject(container) {
 
               <label class="switch-row">
                 <div class="switch-info">
-                  <span class="switch-title">Minimal / Simple Template</span>
-                  <span class="switch-desc">Use minimal folder structure instead of full category blueprint</span>
+                  <span class="switch-title">Minimal Template</span>
+                  <span class="switch-desc">Use minimal 4-folder skeleton instead of full category structure</span>
                 </div>
                 <input type="checkbox" id="project-simple" class="toggle-checkbox" />
               </label>
@@ -76,8 +77,8 @@ export async function renderNewProject(container) {
             <!-- Live Interactive Folder Tree Preview -->
             <div class="scaffold-preview-card">
               <div class="preview-card-header">
-                <span class="preview-card-title">Live Blueprint Scaffold Preview</span>
-                <span id="preview-category-tag" class="card-category-tag">Video</span>
+                <span class="preview-card-title">Scaffold Directory Preview</span>
+                <span id="preview-category-tag" class="card-cat-badge">Video</span>
               </div>
               <div id="preview-slug-path" class="preview-path font-mono">01_Projects/Video/YYYY-MM-DD_Project_Name</div>
               
@@ -90,7 +91,6 @@ export async function renderNewProject(container) {
             <div class="form-actions-row">
               <a href="#dashboard" class="btn btn-secondary">Cancel</a>
               <button type="submit" id="submit-project-btn" class="btn btn-primary">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Scaffold Project
               </button>
             </div>
@@ -113,7 +113,7 @@ export async function renderNewProject(container) {
       const enabled = data.enabled || categoriesData;
       selectEl.innerHTML = Object.entries(enabled).map(([name, config]) => `
         <option value="${name}" ${name === defaultCategory ? 'selected' : ''}>
-          ${config.icon || '📁'} ${name} — ${config.description || ''}
+          ${name} — ${config.description || ''}
         </option>
       `).join("");
     }
@@ -160,7 +160,7 @@ export async function renderNewProject(container) {
     }
 
     if (previewSlugPath) previewSlugPath.textContent = targetPath;
-    if (previewCategoryTag) previewCategoryTag.textContent = `${catConfig.icon || '📁'} ${selectedCat}`;
+    if (previewCategoryTag) previewCategoryTag.textContent = selectedCat;
 
     // Subfolders list
     let subfolders = [];
@@ -173,30 +173,30 @@ export async function renderNewProject(container) {
     if (treeOutput) {
       treeOutput.innerHTML = `
         <div class="tree-root">
-          <span class="tree-icon">📁</span>
+          <span class="tree-icon">${icons.folder}</span>
           <strong>${slug}</strong>
         </div>
         <div class="tree-branches">
           ${subfolders.map((folder, idx) => `
             <div class="tree-node">
               <span class="tree-line">${idx === subfolders.length - 1 && !isGit ? '└─' : '├─'}</span>
-              <span class="tree-folder-icon">📂</span>
+              <span class="tree-folder-icon">${icons.folder}</span>
               <span class="tree-name ${folder === '00_Notes' ? 'notes-highlight' : ''}">${folder}</span>
               ${folder === '00_Notes' ? '<span class="tree-tag-obsidian">Obsidian Brain</span>' : ''}
             </div>
           `).join("")}
           <div class="tree-node">
             <span class="tree-line">├─</span>
-            <span class="tree-file-icon">📄</span>
+            <span class="tree-file-icon">${icons.file}</span>
             <span class="tree-name font-mono">meta.json</span>
-            <span class="tree-tag-meta">CreativeOS Metadata</span>
+            <span class="tree-tag-meta">Metadata</span>
           </div>
           ${isGit ? `
             <div class="tree-node">
               <span class="tree-line">└─</span>
-              <span class="tree-file-icon">🐙</span>
+              <span class="tree-file-icon">${icons.git}</span>
               <span class="tree-name font-mono">.git/ &amp; .gitignore</span>
-              <span class="tree-tag-git">Git Version Control</span>
+              <span class="tree-tag-git">Git</span>
             </div>
           ` : ''}
         </div>
@@ -219,7 +219,7 @@ export async function renderNewProject(container) {
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
       <span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin: 0;"></span>
-      Scaffolding Project...
+      Scaffolding...
     `;
 
     const payload = {
@@ -240,10 +240,7 @@ export async function renderNewProject(container) {
     } catch (err) {
       showToast(`Creation failed: ${err.message}`, "error");
       submitBtn.disabled = false;
-      submitBtn.innerHTML = `
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Scaffold Project
-      `;
+      submitBtn.innerHTML = `Scaffold Project`;
     }
   });
 }

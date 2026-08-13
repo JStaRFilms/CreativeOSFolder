@@ -1,16 +1,16 @@
 /**
- * Storage Data Table Component
+ * Storage Data Table Component — Precision Studio Instrument
  */
 
 import { formatBytes } from "../api.js";
+import { getCategoryIconSvg, icons } from "../icons.js";
 
 export function renderStorageTable(projects, currentSort = { key: "total_size", asc: false }) {
   if (!projects || projects.length === 0) {
     return `
       <div class="empty-state">
-        <div class="empty-icon">📦</div>
-        <h3 style="margin-bottom: 0.5rem; color: var(--text-primary);">No Projects Found</h3>
-        <p>No projects matched your storage search or filter query.</p>
+        <h3 style="margin-bottom: 0.35rem; color: var(--text-primary); font-size: 1rem;">No Projects Found</h3>
+        <p style="font-size: 0.85rem;">No projects matched your storage search or filter query.</p>
       </div>
     `;
   }
@@ -43,14 +43,14 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
 
   const rows = sorted.map((p) => {
     const cat = p.type || "Video";
-    const catLower = cat.toLowerCase();
     const percent = Math.min(100, Math.max(3, ((p.total_size || 0) / maxSize) * 100));
+    const catIconSvg = getCategoryIconSvg(cat);
 
     return `
       <tr class="storage-row" data-slug="${p.slug || ''}" data-path="${p.path || ''}">
         <td>
           <div class="cell-project-name">
-            <span class="cell-cat-icon" style="background-color: var(--cat-${catLower}-bg, var(--badge-bg)); color: var(--cat-${catLower}, var(--color-primary));">${p.icon || "📁"}</span>
+            <span class="cell-cat-icon" aria-hidden="true">${catIconSvg}</span>
             <div class="cell-name-wrap">
               <span class="cell-title" title="${p.path}">${p.name}</span>
               <span class="cell-rel-path">${p.relative_path || p.slug}</span>
@@ -58,7 +58,7 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
           </div>
         </td>
         <td>
-          <span class="card-category-tag" style="background-color: var(--cat-${catLower}-bg, var(--badge-bg)); color: var(--cat-${catLower}, var(--text-secondary));">
+          <span class="card-cat-badge">
             ${cat}
           </span>
         </td>
@@ -67,13 +67,13 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
           <div class="cell-storage-wrap">
             <span class="cell-mono font-bold" style="color: var(--text-primary);">${formatBytes(p.total_size)}</span>
             <div class="cell-size-track">
-              <div class="cell-size-fill" style="width: ${percent}%; background-color: var(--cat-${catLower}, var(--color-primary));"></div>
+              <div class="cell-size-fill" style="width: ${percent}%;"></div>
             </div>
           </div>
         </td>
         <td class="cell-mono cell-media">${formatBytes(p.media_size)}</td>
         <td class="cell-mono cell-reclaimable">
-          ${p.reclaimable_size > 0 ? `<span>⚡ ${formatBytes(p.reclaimable_size)}</span>` : `<span style="color: var(--text-dim);">0 B</span>`}
+          ${p.reclaimable_size > 0 ? `<span>${icons.zap} ${formatBytes(p.reclaimable_size)}</span>` : `<span style="color: var(--text-dim);">0 B</span>`}
         </td>
         <td class="cell-mono">${p.file_count || 0}</td>
         <td class="cell-mono">${p.last_meaningful_update ? p.last_meaningful_update.substring(0, 10) : "—"}</td>
@@ -104,7 +104,7 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
       </div>
       <div class="table-footer-info">
         <span>Showing <strong>${sorted.length}</strong> project${sorted.length === 1 ? '' : 's'}</span>
-        <span class="safe-tag">🔒 Storage inventory is <strong>read-only</strong></span>
+        <span class="safe-tag">Storage inventory is <strong>read-only</strong></span>
       </div>
     </div>
   `;

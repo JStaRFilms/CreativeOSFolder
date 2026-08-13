@@ -1,8 +1,9 @@
 /**
- * Settings & Obsidian Sync View
+ * Settings & Obsidian Sync View — Studio Blueprint Explorer
  */
 
 import { api } from "../api.js";
+import { getCategoryIconSvg, icons } from "../icons.js";
 import { showToast } from "../components/toast.js";
 
 export async function renderSettings(container) {
@@ -10,7 +11,7 @@ export async function renderSettings(container) {
     <div class="page-header">
       <div>
         <div class="page-eyebrow">
-          <span class="studio-status-indicator" style="background-color: var(--color-accent-purple);"></span>
+          <span class="studio-status-indicator" style="background-color: var(--text-primary);"></span>
           <span>SYSTEM RUNTIME &amp; INTEGRATION</span>
         </div>
         <h1 class="page-title">System &amp; Vault Sync</h1>
@@ -26,7 +27,7 @@ export async function renderSettings(container) {
           <p class="section-desc">Bidirectional synchronization between project <code>00_Notes/</code> and your Obsidian Vault</p>
         </div>
         <button id="trigger-sync-btn" class="btn btn-primary">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
           Sync With Vault
         </button>
       </div>
@@ -88,13 +89,13 @@ export async function renderSettings(container) {
                   <div class="path-title-row">
                     <span class="path-name">${key}</span>
                     <span class="path-status ${info.exists ? 'status-ok' : 'status-missing'}">
-                      ${info.exists ? '● Connected' : '✕ Missing'}
+                      ${info.exists ? 'Connected' : 'Missing'}
                     </span>
                   </div>
                   <span class="path-val font-mono">${info.path}</span>
                 </div>
                 <button class="icon-button copy-path-btn" data-copy="${info.path}" title="Copy path" aria-label="Copy path">
-                  📋
+                  ${icons.copy}
                 </button>
               </div>
             `).join("")}
@@ -122,22 +123,23 @@ export async function renderSettings(container) {
         categoriesContainer.innerHTML = `
           <div class="category-cards-grid">
             ${Object.entries(categories).map(([name, cat]) => {
-              const catLower = name.toLowerCase();
               const folders = cat.folder_structure || [];
+              const catIconSvg = getCategoryIconSvg(name);
               return `
                 <div class="category-blueprint-card">
                   <div class="blueprint-header">
                     <div class="blueprint-title-group">
-                      <span class="blueprint-icon" style="background-color: var(--cat-${catLower}-bg, var(--badge-bg)); color: var(--cat-${catLower}, var(--color-primary));">
-                        ${cat.icon || '📁'}
+                      <span class="blueprint-icon">
+                        ${catIconSvg}
                       </span>
                       <div>
                         <h4 class="blueprint-name">${name}</h4>
                         <span class="blueprint-folder font-mono">01_Projects/${cat.physical_folder || name}/</span>
                       </div>
                     </div>
-                    <span class="status-badge ${cat.enabled !== false ? 'status-active' : 'status-stale'}">
-                      ${cat.enabled !== false ? 'Enabled' : 'Disabled'}
+                    <span class="status-indicator-tag ${cat.enabled !== false ? 'is-active' : 'is-stale'}">
+                      <span class="status-dot"></span>
+                      <span>${cat.enabled !== false ? 'Enabled' : 'Disabled'}</span>
                     </span>
                   </div>
                   
@@ -171,7 +173,7 @@ export async function renderSettings(container) {
     syncBtn.disabled = true;
     syncBtn.innerHTML = `
       <span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin: 0;"></span>
-      Syncing Notes...
+      Syncing...
     `;
 
     if (syncConsole) {
@@ -194,20 +196,20 @@ export async function renderSettings(container) {
           syncLogEntries.innerHTML = result.logs.map(l => {
             const typeClass = `log-${l.type || 'info'}`;
             return `<div class="log-entry ${typeClass}"><span>[${l.project || 'System'}]</span> <span>${(l.type || 'SYNC').toUpperCase()}: ${l.file || ''}</span></div>`;
-          }).join("") + `<div class="log-entry log-push" style="margin-top: 0.5rem;"><span>✅ Sync finished successfully (${result.total_changes || 0} updates applied).</span></div>`;
+          }).join("") + `<div class="log-entry log-push" style="margin-top: 0.5rem;"><span>Sync finished (${result.total_changes || 0} updates applied).</span></div>`;
         } else {
-          syncLogEntries.innerHTML = `<div class="log-entry log-push"><span>✅ All notes are synchronized. (${result.projects_synced || 0} projects scanned, 0 conflicts).</span></div>`;
+          syncLogEntries.innerHTML = `<div class="log-entry log-push"><span>All notes are synchronized (${result.projects_synced || 0} projects scanned).</span></div>`;
         }
       }
     } catch (err) {
       showToast(`Sync failed: ${err.message}`, "error");
       if (syncLogEntries) {
-        syncLogEntries.innerHTML += `<div class="log-entry log-error"><span>❌ Error: ${err.message}</span></div>`;
+        syncLogEntries.innerHTML += `<div class="log-entry log-error"><span>Error: ${err.message}</span></div>`;
       }
     } finally {
       syncBtn.disabled = false;
       syncBtn.innerHTML = `
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
         Sync With Vault
       `;
     }

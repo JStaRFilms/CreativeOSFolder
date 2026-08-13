@@ -49,8 +49,6 @@
 }
 
 .card-icon-tag {
-  font-size: 1.2rem;
-  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -58,7 +56,17 @@
   height: 32px;
   border-radius: var(--radius-sm);
   background-color: var(--badge-bg);
+  color: var(--text-secondary);
   flex-shrink: 0;
+}
+
+.card-icon-tag svg {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.2s ease;
+}
+
+.project-card:hover .card-icon-tag svg {
+  transform: scale(1.15) rotate(-3deg);
+  stroke: var(--text-primary);
 }
 
 .card-heading-group {
@@ -186,6 +194,7 @@
 .card-cache-badge {
   display: inline-flex;
   align-items: center;
+  gap: 0.25rem;
   padding: 0.1rem 0.4rem;
   background-color: var(--color-warning-bg);
   color: var(--color-warning);
@@ -193,6 +202,11 @@
   font-size: 0.675rem;
   font-family: var(--font-mono);
   font-weight: 600;
+}
+
+.card-cache-badge svg {
+  width: 10px;
+  height: 10px;
 }
 
 .card-inspect-action {
@@ -205,9 +219,16 @@
   transition: all var(--transition-fast);
 }
 
+.card-inspect-action svg {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 .project-card:hover .card-inspect-action {
   color: var(--color-primary);
-  transform: translateX(2px);
+}
+
+.project-card:hover .card-inspect-action svg {
+  transform: translateX(3px);
 }
 
 /* Compact List View */

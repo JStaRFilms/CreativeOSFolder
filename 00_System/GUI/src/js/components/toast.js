@@ -1,8 +1,10 @@
 /**
- * Toast Notification Component
+ * Toast Notification Component — Sleek Monochrome Vector Toast
  */
 
-export function showToast(message, type = "info", duration = 3500) {
+import { icons } from "../icons.js";
+
+export function showToast(message, type = "info", duration = 3000) {
   let container = document.getElementById("toast-container");
   if (!container) {
     container = document.createElement("div");
@@ -14,14 +16,14 @@ export function showToast(message, type = "info", duration = 3500) {
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
   
-  const icon = type === "success" 
-    ? "✅" 
+  const iconSvg = type === "success" 
+    ? icons.success 
     : type === "error" 
-    ? "❌" 
-    : "ℹ️";
+    ? icons.error 
+    : icons.info;
 
   toast.innerHTML = `
-    <span class="toast-icon">${icon}</span>
+    <span class="toast-icon-wrap type-${type}">${iconSvg}</span>
     <div class="toast-content">${message}</div>
   `;
 
@@ -29,10 +31,10 @@ export function showToast(message, type = "info", duration = 3500) {
 
   setTimeout(() => {
     toast.style.opacity = "0";
-    toast.style.transform = "translateY(10px)";
-    toast.style.transition = "all 0.2s ease-out";
+    toast.style.transform = "translateY(8px)";
+    toast.style.transition = "all 0.15s ease-out";
     setTimeout(() => {
       toast.remove();
-    }, 200);
+    }, 150);
   }, duration);
 }
