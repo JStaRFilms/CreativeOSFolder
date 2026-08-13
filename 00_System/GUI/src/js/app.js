@@ -10,6 +10,7 @@ import "../css/forms.css";
 import { initTheme, toggleTheme } from "./theme.js";
 import { initRouter } from "./router.js";
 import { showToast } from "./components/toast.js";
+import { closeActiveModal } from "./components/modal.js";
 
 // Initialize Theme
 initTheme();
@@ -23,6 +24,24 @@ themeBtn?.addEventListener("click", () => {
 
 // Initialize SPA Router
 initRouter("app-main");
+
+// Global Keyboard Shortcuts
+window.addEventListener("keydown", (e) => {
+  // Close modal on Escape
+  if (e.key === "Escape") {
+    closeActiveModal();
+  }
+
+  // Focus Search on "/" key if not in an input/textarea
+  if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
+    const searchInput = document.getElementById("project-search-input") || document.getElementById("storage-search-input");
+    if (searchInput) {
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    }
+  }
+});
 
 // Register PWA Service Worker
 if ("serviceWorker" in navigator && window.location.protocol.startsWith("http")) {

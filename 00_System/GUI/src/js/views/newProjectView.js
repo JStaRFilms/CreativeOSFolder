@@ -1,5 +1,5 @@
 /**
- * New Project View
+ * New Project View — Interactive Studio Scaffold
  */
 
 import { api } from "../api.js";
@@ -10,63 +10,88 @@ export async function renderNewProject(container) {
     <div class="form-container">
       <div class="page-header" style="justify-content: center; text-align: center; margin-bottom: 2rem;">
         <div>
+          <div class="page-eyebrow" style="justify-content: center;">
+            <span>SCAFFOLD WORKSPACE</span>
+          </div>
           <h1 class="page-title">Create New Project</h1>
-          <p class="page-description">Initialize a structured project directory with templates and Obsidian sync metadata</p>
+          <p class="page-description">Generate a structured workspace directory with category blueprints and Obsidian notes linkage</p>
         </div>
       </div>
 
       <div class="form-card">
         <form id="new-project-form">
           <div class="form-grid">
+            <!-- Project Name -->
             <div class="form-group">
-              <label class="form-label" for="project-name">Project Name <span style="color: var(--color-danger);">*</span></label>
-              <input type="text" id="project-name" class="form-input" placeholder="e.g. Summer Promo, Brand Redesign, Mobile App" required autofocus />
-              <span class="form-hint">Spaces and hyphens are supported; special characters will be sanitized.</span>
+              <label class="form-label" for="project-name">
+                <span>Project Name</span>
+                <span class="required-star">*</span>
+              </label>
+              <input type="text" id="project-name" class="form-input" placeholder="e.g. Summer Promo, Brand Redesign, AI Agent Hub" required autofocus autocomplete="off" />
+              <span class="form-hint">Spaces and hyphens are supported; special characters will be sanitized automatically.</span>
             </div>
 
+            <!-- Category & Client -->
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="project-category">Category</label>
+                <label class="form-label" for="project-category">Category Blueprint</label>
                 <select id="project-category" class="form-select">
-                  <option value="Video">🎬 Video</option>
+                  <option value="Video">🎬 Video — Video production projects</option>
                 </select>
               </div>
 
               <div class="form-group">
                 <label class="form-label" for="project-client">Client (Optional)</label>
-                <input type="text" id="project-client" class="form-input" placeholder="e.g. Acme Corp, Nike" />
+                <input type="text" id="project-client" class="form-input" placeholder="e.g. Nike, Acme Corp, Sony" autocomplete="off" />
+                <span class="form-hint">Places the project in <code>01_Projects/Clients/[Client]/</code></span>
               </div>
             </div>
 
+            <!-- Date Override -->
             <div class="form-group">
               <label class="form-label" for="project-date">Date Override (Optional)</label>
               <input type="date" id="project-date" class="form-input" />
-              <span class="form-hint">Leave blank to use today's date for the slug prefix.</span>
+              <span class="form-hint">Leave blank to use today's timestamp (<code>YYYY-MM-DD</code>) for the directory slug prefix.</span>
             </div>
 
-            <div class="form-group" style="gap: 0.75rem; margin-top: 0.25rem;">
-              <label class="form-checkbox-group">
-                <input type="checkbox" id="project-git" class="form-checkbox" />
-                <span class="checkbox-label"><strong>Initialize Git Repository</strong> (add standard .gitignore and git init)</span>
+            <!-- Blueprint Options -->
+            <div class="form-group-switches">
+              <label class="switch-row">
+                <div class="switch-info">
+                  <span class="switch-title">Initialize Git Repository</span>
+                  <span class="switch-desc">Creates <code>.git</code> repository and studio <code>.gitignore</code></span>
+                </div>
+                <input type="checkbox" id="project-git" class="toggle-checkbox" />
               </label>
 
-              <label class="form-checkbox-group">
-                <input type="checkbox" id="project-simple" class="form-checkbox" />
-                <span class="checkbox-label"><strong>Use Simple Template</strong> (minimal skeleton instead of full category structure)</span>
+              <label class="switch-row">
+                <div class="switch-info">
+                  <span class="switch-title">Minimal / Simple Template</span>
+                  <span class="switch-desc">Use minimal folder structure instead of full category blueprint</span>
+                </div>
+                <input type="checkbox" id="project-simple" class="toggle-checkbox" />
               </label>
             </div>
 
-            <!-- Live Preview Box -->
-            <div class="preview-box">
-              <div class="preview-title">Target Directory Preview</div>
-              <div id="preview-slug" class="preview-path">01_Projects/Video/YYYY-MM-DD_Project_Name</div>
+            <!-- Live Interactive Folder Tree Preview -->
+            <div class="scaffold-preview-card">
+              <div class="preview-card-header">
+                <span class="preview-card-title">Live Blueprint Scaffold Preview</span>
+                <span id="preview-category-tag" class="card-category-tag">Video</span>
+              </div>
+              <div id="preview-slug-path" class="preview-path font-mono">01_Projects/Video/YYYY-MM-DD_Project_Name</div>
+              
+              <div class="scaffold-tree-container">
+                <div id="scaffold-tree-output" class="folder-tree-view"></div>
+              </div>
             </div>
 
-            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+            <!-- Action Buttons -->
+            <div class="form-actions-row">
               <a href="#dashboard" class="btn btn-secondary">Cancel</a>
               <button type="submit" id="submit-project-btn" class="btn btn-primary">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Create Project
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Scaffold Project
               </button>
             </div>
           </div>
@@ -100,12 +125,16 @@ export async function renderNewProject(container) {
   const categorySelect = document.getElementById("project-category");
   const clientInput = document.getElementById("project-client");
   const dateInput = document.getElementById("project-date");
-  const previewSlug = document.getElementById("preview-slug");
+  const gitCheckbox = document.getElementById("project-git");
+  const simpleCheckbox = document.getElementById("project-simple");
+  const previewSlugPath = document.getElementById("preview-slug-path");
+  const previewCategoryTag = document.getElementById("preview-category-tag");
+  const treeOutput = document.getElementById("scaffold-tree-output");
   const form = document.getElementById("new-project-form");
   const submitBtn = document.getElementById("submit-project-btn");
 
-  function updatePreview() {
-    const rawName = (nameInput?.value || "").trim() || "My_Project";
+  function updateScaffoldPreview() {
+    const rawName = (nameInput?.value || "").trim() || "My_New_Project";
     const safeName = rawName.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_");
     
     let datePrefix;
@@ -118,8 +147,11 @@ export async function renderNewProject(container) {
 
     const slug = `${datePrefix}_${safeName}`;
     const selectedCat = categorySelect?.value || defaultCategory;
-    const catFolder = categoriesData[selectedCat]?.physical_folder || selectedCat;
+    const catConfig = categoriesData[selectedCat] || {};
+    const catFolder = catConfig.physical_folder || selectedCat;
     const client = (clientInput?.value || "").trim();
+    const isSimple = simpleCheckbox?.checked || false;
+    const isGit = gitCheckbox?.checked || false;
 
     let targetPath = `01_Projects/${catFolder}/${slug}`;
     if (client) {
@@ -127,16 +159,58 @@ export async function renderNewProject(container) {
       targetPath = `01_Projects/Clients/${safeClient}/${slug}`;
     }
 
-    if (previewSlug) {
-      previewSlug.textContent = targetPath;
+    if (previewSlugPath) previewSlugPath.textContent = targetPath;
+    if (previewCategoryTag) previewCategoryTag.textContent = `${catConfig.icon || '📁'} ${selectedCat}`;
+
+    // Subfolders list
+    let subfolders = [];
+    if (isSimple) {
+      subfolders = ["00_Notes", "01_Source", "02_Build", "03_Exports"];
+    } else {
+      subfolders = catConfig.folder_structure || ["00_Notes", "01_Source", "02_Build", "03_Exports"];
+    }
+
+    if (treeOutput) {
+      treeOutput.innerHTML = `
+        <div class="tree-root">
+          <span class="tree-icon">📁</span>
+          <strong>${slug}</strong>
+        </div>
+        <div class="tree-branches">
+          ${subfolders.map((folder, idx) => `
+            <div class="tree-node">
+              <span class="tree-line">${idx === subfolders.length - 1 && !isGit ? '└─' : '├─'}</span>
+              <span class="tree-folder-icon">📂</span>
+              <span class="tree-name ${folder === '00_Notes' ? 'notes-highlight' : ''}">${folder}</span>
+              ${folder === '00_Notes' ? '<span class="tree-tag-obsidian">Obsidian Brain</span>' : ''}
+            </div>
+          `).join("")}
+          <div class="tree-node">
+            <span class="tree-line">├─</span>
+            <span class="tree-file-icon">📄</span>
+            <span class="tree-name font-mono">meta.json</span>
+            <span class="tree-tag-meta">CreativeOS Metadata</span>
+          </div>
+          ${isGit ? `
+            <div class="tree-node">
+              <span class="tree-line">└─</span>
+              <span class="tree-file-icon">🐙</span>
+              <span class="tree-name font-mono">.git/ &amp; .gitignore</span>
+              <span class="tree-tag-git">Git Version Control</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
     }
   }
 
-  nameInput?.addEventListener("input", updatePreview);
-  categorySelect?.addEventListener("change", updatePreview);
-  clientInput?.addEventListener("input", updatePreview);
-  dateInput?.addEventListener("change", updatePreview);
-  updatePreview();
+  nameInput?.addEventListener("input", updateScaffoldPreview);
+  categorySelect?.addEventListener("change", updateScaffoldPreview);
+  clientInput?.addEventListener("input", updateScaffoldPreview);
+  dateInput?.addEventListener("change", updateScaffoldPreview);
+  gitCheckbox?.addEventListener("change", updateScaffoldPreview);
+  simpleCheckbox?.addEventListener("change", updateScaffoldPreview);
+  updateScaffoldPreview();
 
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -145,7 +219,7 @@ export async function renderNewProject(container) {
     submitBtn.disabled = true;
     submitBtn.innerHTML = `
       <span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin: 0;"></span>
-      Spawning...
+      Scaffolding Project...
     `;
 
     const payload = {
@@ -153,13 +227,13 @@ export async function renderNewProject(container) {
       category: categorySelect?.value || defaultCategory,
       client: clientInput?.value.trim() || null,
       date: dateInput?.value || null,
-      git: document.getElementById("project-git")?.checked || false,
-      simple: document.getElementById("project-simple")?.checked || false,
+      git: gitCheckbox?.checked || false,
+      simple: simpleCheckbox?.checked || false,
     };
 
     try {
       const res = await api.createProject(payload);
-      showToast(`Project created: ${res.project.name}`, "success");
+      showToast(`Project created: ${res.project.name || payload.name}`, "success");
       setTimeout(() => {
         window.location.hash = "#dashboard";
       }, 500);
@@ -167,8 +241,8 @@ export async function renderNewProject(container) {
       showToast(`Creation failed: ${err.message}`, "error");
       submitBtn.disabled = false;
       submitBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Create Project
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Scaffold Project
       `;
     }
   });

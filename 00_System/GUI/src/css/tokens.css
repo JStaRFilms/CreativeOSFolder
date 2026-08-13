@@ -1,86 +1,113 @@
 :root {
-  /* Common Brand Colors */
+  /* Studio Typography */
+  --font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Space Grotesk", "Plus Jakarta Sans", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Brand / Studio Core Colors */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
-  --color-primary-light: #eff6ff;
-  --color-primary-glow: rgba(37, 99, 235, 0.15);
+  --color-primary-light: rgba(37, 99, 235, 0.08);
+  --color-primary-glow: rgba(37, 99, 235, 0.18);
 
-  --color-success: #10b981;
-  --color-success-bg: rgba(16, 185, 129, 0.12);
-  --color-warning: #f59e0b;
-  --color-warning-bg: rgba(245, 158, 11, 0.12);
-  --color-danger: #ef4444;
-  --color-danger-bg: rgba(239, 68, 68, 0.12);
+  --color-accent-cyan: #0891b2;
+  --color-accent-cyan-bg: rgba(8, 145, 178, 0.08);
 
-  /* Typography */
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  /* Status Studio Semantics */
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.08);
+  --color-success-border: rgba(5, 150, 105, 0.2);
 
-  /* Spacing */
-  --spacing-xs: 0.25rem;
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.08);
+  --color-warning-border: rgba(217, 119, 6, 0.2);
+
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.08);
+
+  /* Spacing Scale */
+  --spacing-3xs: 0.125rem;
+  --spacing-2xs: 0.25rem;
+  --spacing-xs: 0.375rem;
   --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-  --spacing-2xl: 3rem;
+  --spacing-md: 0.75rem;
+  --spacing-lg: 1rem;
+  --spacing-xl: 1.5rem;
+  --spacing-2xl: 2rem;
 
   /* Border Radii */
+  --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Transitions */
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.25s ease;
+  /* Motion & Transitions */
+  --transition-fast: 0.12s ease-out;
+  --transition-normal: 0.18s ease-out;
 }
 
-/* Light Theme */
+/* Light Theme — High-Contrast Architectural Studio */
 [data-theme="light"] {
-  --bg-app: #f8fafc;
+  --bg-app: #f8f9fb;
   --bg-surface: #ffffff;
-  --bg-surface-hover: #f1f5f9;
-  --bg-surface-active: #e2e8f0;
-  --bg-header: rgba(255, 255, 255, 0.85);
+  --bg-surface-elevated: #ffffff;
+  --bg-surface-hover: #f3f4f6;
+  --bg-surface-active: #e5e7eb;
+  --bg-header: rgba(255, 255, 255, 0.94);
+  --bg-modal-backdrop: rgba(15, 23, 42, 0.5);
   
-  --border-subtle: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border-subtle: #e5e7eb;
+  --border-strong: #d1d5db;
+  --border-focus: #2563eb;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+  --text-dim: #9ca3af;
   --text-inverse: #ffffff;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 
-  --badge-bg: #f1f5f9;
-  --badge-text: #334155;
-  --code-bg: #f1f5f9;
+  --badge-bg: #f3f4f6;
+  --badge-text: #374151;
+  --code-bg: #f3f4f6;
+  --console-bg: #111827;
 }
 
-/* Dark Theme */
+/* Dark Theme — Studio Monolith Carbon */
 [data-theme="dark"] {
-  --bg-app: #090d16;
-  --bg-surface: #111827;
-  --bg-surface-hover: #1f293d;
-  --bg-surface-active: #28354f;
-  --bg-header: rgba(17, 24, 39, 0.85);
+  --bg-app: #0b0d13;
+  --bg-surface: #12151e;
+  --bg-surface-elevated: #181d29;
+  --bg-surface-hover: #1f2535;
+  --bg-surface-active: #273044;
+  --bg-header: rgba(18, 21, 30, 0.92);
+  --bg-modal-backdrop: rgba(3, 4, 7, 0.8);
 
-  --border-subtle: #1f2937;
-  --border-strong: #374151;
+  --border-subtle: #1e2433;
+  --border-strong: #2c354b;
+  --border-focus: #3b82f6;
 
   --text-primary: #f9fafb;
   --text-secondary: #d1d5db;
-  --text-muted: #9ca3af;
-  --text-inverse: #0f172a;
+  --text-muted: #8b95a5;
+  --text-dim: #5a6474;
+  --text-inverse: #0b0d13;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 2px 4px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 6px 14px -2px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 14px 24px -4px rgba(0, 0, 0, 0.75);
+  --shadow-modal: 0 24px 48px -8px rgba(0, 0, 0, 0.9);
 
-  --badge-bg: #1f2937;
-  --badge-text: #e5e7eb;
-  --code-bg: #1f2937;
+  --badge-bg: #181d29;
+  --badge-text: #d1d5db;
+  --code-bg: #181d29;
+  --console-bg: #07090e;
 }
