@@ -44,8 +44,11 @@ from .storage import (
     _created_date,
     build_storage_index,
     discover_projects,
+    find_project_reclaimable_dirs,
     inspect_project,
     load_storage_index,
+    reclaim_bulk_space,
+    reclaim_project_space,
     refresh_storage_index,
     stale_projects,
 )
@@ -193,6 +196,17 @@ class UpdateProjectRequest(BaseModel):
 
 class OpenPathRequest(BaseModel):
     path: Optional[str] = Field(default="", description="Path or project name to open with native OS handler")
+
+
+class ReclaimProjectRequest(BaseModel):
+    project: str = Field(..., description="Project name, slug, or relative path")
+    targets: Optional[list[str]] = Field(default=None, description="Optional list of specific folder names or subpaths to reclaim")
+
+
+class ReclaimBulkRequest(BaseModel):
+    stale_only: bool = Field(default=False, description="Whether to restrict to stale projects (>90 days inactive)")
+    days: int = Field(default=DEFAULT_STALE_DAYS, description="Threshold for stale inactivity in days")
+    project_slugs: Optional[list[str]] = Field(default=None, description="Optional explicit list of project slugs or paths")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -972,6 +986,51 @@ def refresh_storage() -> dict[str, Any]:
         "stale_count": len(stale_list),
         "stale_days_threshold": DEFAULT_STALE_DAYS,
     }
+
+
+@app.get("/api/storage/reclaimable")
+def get_reclaimable(project: str) -> dict[str, Any]:
+    """Inspect detailed reclaimable cache and dependency folders for a project."""
+    proj_path, meta = _find_project_dir(project)
+    items = find_project_reclaimable_dirs(proj_path)
+    total_reclaimable = sum(it.get("size", 0) for it in items)
+    total_files = sum(it.get("file_count", 0) for it in items)
+    return {
+        "status": "success",
+        "project": meta.get("name", proj_path.name),
+        "slug": meta.get("slug", proj_path.name),
+        "path": str(proj_path),
+        "total_reclaimable": total_reclaimable,
+        "total_files": total_files,
+        "items": items,
+    }
+
+
+@app.post("/api/storage/reclaim")
+def reclaim_project(req: ReclaimProjectRequest) -> dict[str, Any]:
+    """Purge regenerable dependencies and caches for a single project."""
+    proj_path, meta = _find_project_dir(req.project)
+    result = reclaim_project_space(proj_path, target_subdirs=req.targets)
+    _invalidate_server_cache()
+    return {
+        "status": "success",
+        "project": meta.get("name", proj_path.name),
+        "slug": meta.get("slug", proj_path.name),
+        "path": str(proj_path),
+        **result,
+    }
+
+
+@app.post("/api/storage/reclaim-bulk")
+def reclaim_bulk(req: ReclaimBulkRequest) -> dict[str, Any]:
+    """Bulk reclaim regenerable caches and dependencies across multiple or stale projects."""
+    result = reclaim_bulk_space(
+        stale_only=req.stale_only,
+        days=req.days,
+        project_paths=req.project_slugs,
+    )
+    _invalidate_server_cache()
+    return result
 
 
 def _load_template_structures() -> dict[str, Any]:

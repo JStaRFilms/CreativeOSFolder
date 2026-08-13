@@ -100,3 +100,69 @@ def test_load_invalid_index_returns_none(temp_dir):
     index_path.write_text("not-json", encoding="utf-8")
 
     assert storage.load_storage_index(index_path) is None
+
+
+def test_find_and_reclaim_project_space(temp_projects_dir, temp_dir):
+    project = _create_project(temp_projects_dir, "Reclaim Demo")
+    source = project / "00_Notes" / "idea.md"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"# Source Note")
+
+    modules = project / "node_modules" / "pkg" / "index.js"
+    modules.parent.mkdir(parents=True, exist_ok=True)
+    modules.write_bytes(b"var x = 1;")
+
+    next_cache = project / ".next" / "cache" / "data.json"
+    next_cache.parent.mkdir(parents=True, exist_ok=True)
+    next_cache.write_bytes(b'{"cache": true}')
+
+    index_path = temp_dir / "storage_index.json"
+    storage.refresh_storage_index(temp_projects_dir, index_path)
+
+    # 1. Find reclaimable items
+    items = storage.find_project_reclaimable_dirs(project)
+    names = {it["name"] for it in items}
+    assert "node_modules" in names
+    assert ".next" in names
+
+    # 2. Reclaim specific target (.next only)
+    res_partial = storage.reclaim_project_space(
+        project,
+        target_subdirs=[".next"],
+        projects_path=temp_projects_dir,
+        index_path=index_path,
+    )
+    assert res_partial["status"] == "success"
+    assert not (project / ".next").exists()
+    assert (project / "node_modules").exists()
+    assert (project / "00_Notes" / "idea.md").exists()
+
+    # 3. Reclaim remaining target (all)
+    res_all = storage.reclaim_project_space(
+        project,
+        projects_path=temp_projects_dir,
+        index_path=index_path,
+    )
+    assert res_all["status"] == "success"
+    assert not (project / "node_modules").exists()
+    assert (project / "00_Notes" / "idea.md").exists()
+
+
+def test_reclaim_bulk_space(temp_projects_dir, temp_dir):
+    p1 = _create_project(temp_projects_dir, "Project 1")
+    mod1 = p1 / "node_modules" / "index.js"
+    mod1.parent.mkdir(parents=True, exist_ok=True)
+    mod1.write_bytes(b"console.log('mod1');")
+
+    index_path = temp_dir / "storage_index.json"
+    storage.refresh_storage_index(temp_projects_dir, index_path)
+
+    bulk_res = storage.reclaim_bulk_space(
+        stale_only=False,
+        projects_path=temp_projects_dir,
+        index_path=index_path,
+    )
+    assert bulk_res["status"] == "success"
+    assert bulk_res["total_freed_bytes"] > 0
+    assert not (p1 / "node_modules").exists()
+

@@ -73,7 +73,12 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
         </td>
         <td class="cell-mono cell-media">${formatBytes(p.media_size)}</td>
         <td class="cell-mono cell-reclaimable">
-          ${p.reclaimable_size > 0 ? `<span>${icons.zap} ${formatBytes(p.reclaimable_size)}</span>` : `<span style="color: var(--text-dim);">0 B</span>`}
+          ${p.reclaimable_size > 0 ? `
+            <button type="button" class="row-reclaim-badge row-reclaim-trigger" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" title="Reclaim ${formatBytes(p.reclaimable_size)} from ${p.name}">
+              ${icons.zap}
+              <span>${formatBytes(p.reclaimable_size)}</span>
+            </button>
+          ` : `<span style="color: var(--text-dim);">0 B</span>`}
         </td>
         <td class="cell-mono">${p.file_count || 0}</td>
         <td class="cell-mono">${p.last_meaningful_update ? p.last_meaningful_update.substring(0, 10) : "—"}</td>

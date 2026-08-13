@@ -704,5 +704,312 @@
 .log-entry.log-error { color: var(--color-danger); font-weight: 600; }
 .log-entry.log-conflict { color: var(--color-warning); font-weight: 600; }
 .log-entry.log-info { color: var(--text-secondary); }
+.log-entry.log-purge { color: var(--color-warning); font-weight: 600; }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Storage Reclaim Modal Styles                                              */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+.reclaim-hero-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  gap: 1rem;
+}
+
+.reclaim-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.reclaim-hero-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background-color: rgba(245, 158, 11, 0.12);
+  color: var(--color-warning);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.reclaim-hero-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.reclaim-hero-sub {
+  font-size: 0.725rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.reclaim-hero-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+
+.reclaim-hero-badge {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-warning);
+}
+
+.reclaim-hero-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* Reclaim Item Checklist */
+.reclaim-items-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.reclaim-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.reclaim-item-row:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.reclaim-item-row.is-selected {
+  border-color: rgba(245, 158, 11, 0.4);
+  background-color: rgba(245, 158, 11, 0.04);
+}
+
+.reclaim-item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.reclaim-item-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-warning);
+}
+
+.reclaim-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.reclaim-item-name {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.reclaim-item-desc {
+  font-size: 0.675rem;
+  color: var(--text-muted);
+}
+
+.reclaim-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  flex-shrink: 0;
+}
+
+.reclaim-item-size {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.reclaim-item-files {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+/* Safety Reassurance Notice */
+.reclaim-safety-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  background-color: rgba(16, 185, 129, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 0.725rem;
+  line-height: 1.45;
+  color: var(--color-success);
+}
+
+.reclaim-safety-notice svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+/* Bulk Reclaim Tabs & Table */
+.bulk-reclaim-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.5rem;
+}
+
+.bulk-tab-btn {
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all var(--transition-fast);
+  font-family: inherit;
+}
+
+.bulk-tab-btn:hover {
+  background-color: var(--badge-bg);
+  color: var(--text-primary);
+}
+
+.bulk-tab-btn.is-active {
+  background-color: var(--bg-app);
+  border-color: var(--border-subtle);
+  color: var(--color-warning);
+  font-weight: 700;
+}
+
+.bulk-projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.bulk-project-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.bulk-project-card:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.bulk-project-card.is-selected {
+  border-color: rgba(245, 158, 11, 0.4);
+  background-color: rgba(245, 158, 11, 0.04);
+}
+
+.bulk-project-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.bulk-project-name {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bulk-project-path {
+  font-size: 0.675rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bulk-project-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  flex-shrink: 0;
+}
+
+.bulk-project-size {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: var(--color-warning);
+}
+
+.bulk-project-stale-tag {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+/* Action button with reclaim zap */
+.row-reclaim-badge {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-full);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-mono);
+}
+
+.row-reclaim-badge:hover {
+  background-color: rgba(245, 158, 11, 0.2);
+  border-color: var(--color-warning);
+  transform: translateY(-1px);
+}
 
 

@@ -184,11 +184,30 @@ export const api = {
   getRawFileUrl: (path) => `/api/fs/raw?path=${encodeURIComponent(path)}`,
   getFileContent: (path, maxBytes = 500000) => request(`/fs/content?path=${encodeURIComponent(path)}&max_bytes=${maxBytes}`),
 
-  // Storage
+  // Storage & Reclaim
   getStorage: () => request("/storage"),
   refreshStorage: async () => {
     const res = await request("/storage/refresh", {
       method: "POST",
+    });
+    cacheStore.invalidate("projects");
+    cacheStore.invalidate("storage");
+    return res;
+  },
+  getProjectReclaimable: (project) => request(`/storage/reclaimable?project=${encodeURIComponent(project)}`),
+  reclaimProject: async (project, targets = null) => {
+    const res = await request("/storage/reclaim", {
+      method: "POST",
+      body: JSON.stringify({ project, targets }),
+    });
+    cacheStore.invalidate("projects");
+    cacheStore.invalidate("storage");
+    return res;
+  },
+  reclaimBulk: async ({ stale_only = false, days = 90, project_slugs = null } = {}) => {
+    const res = await request("/storage/reclaim-bulk", {
+      method: "POST",
+      body: JSON.stringify({ stale_only, days, project_slugs }),
     });
     cacheStore.invalidate("projects");
     cacheStore.invalidate("storage");

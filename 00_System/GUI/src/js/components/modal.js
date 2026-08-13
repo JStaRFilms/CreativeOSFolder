@@ -6,6 +6,7 @@
 
 import { api, formatBytes } from "../api.js";
 import { getCategoryIconSvg, icons } from "../icons.js";
+import { openReclaimModal } from "./reclaimModal.js";
 import { showToast } from "./toast.js";
 
 let activeModalCloser = null;
@@ -312,6 +313,12 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                   ${icons.archive}
                   Archive
                 </button>
+                ${(currentProject.reclaimable_size || 0) > 0 ? `
+                  <button class="btn btn-secondary action-btn-reclaim" id="modal-reclaim-btn" style="color: var(--color-warning); font-size: 0.785rem; padding: 0.4rem 0.65rem;" title="Clean Dependencies & Caches">
+                    ${icons.zap}
+                    Reclaim (${formatBytes(currentProject.reclaimable_size)})
+                  </button>
+                ` : ''}
               </div>
             </div>
 
@@ -551,6 +558,15 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
           closeModal();
           onProjectUpdated(null); // Signal removal
         },
+      });
+    });
+
+    // Reclaim Cache & Dependencies
+    document.getElementById("modal-reclaim-btn")?.addEventListener("click", () => {
+      openReclaimModal(currentProject, (res) => {
+        currentProject.reclaimable_size = res.remaining_reclaimable || 0;
+        renderModal();
+        if (onProjectUpdated) onProjectUpdated(currentProject);
       });
     });
 

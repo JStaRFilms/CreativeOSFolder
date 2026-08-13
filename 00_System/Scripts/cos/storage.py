@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import EXCLUDED_DIRS, PROJECTS_PATH, STORAGE_INDEX_PATH
+from .file_utils import robust_rmtree
 
 INDEX_VERSION = 1
 REMINDER_INTERVAL_DAYS = 7
 DEFAULT_STALE_DAYS = 90
 
 # These folders are safe to regenerate from a project's source/configuration.
-# They are measured separately, but this module never removes them.
 REGENERABLE_DIRS = {
     "node_modules",
     ".next",
@@ -34,6 +34,25 @@ REGENERABLE_DIRS = {
     ".venv",
     "venv",
     "env",
+}
+
+REGENERABLE_DESCRIPTIONS = {
+    "node_modules": "Node.js Dependencies · Reinstall via npm/pnpm",
+    ".next": "Next.js Build Cache · Regenerated on build",
+    ".nuxt": "Nuxt Build Cache · Regenerated on build",
+    "dist": "Compiled Distribution Build · Regenerated on build",
+    "build": "Compiled Build Artifacts · Regenerated on build",
+    "coverage": "Test Coverage Reports · Regenerated on test run",
+    ".cache": "Framework / Tooling Cache · Regenerated automatically",
+    ".pytest_cache": "Pytest Cache · Regenerated on pytest run",
+    ".mypy_cache": "Mypy Type Checking Cache · Regenerated on mypy run",
+    "__pycache__": "Python Bytecode Cache · Regenerated on execution",
+    "target": "Rust / Cargo Build Target · Regenerated on cargo build",
+    "out": "Static Export Output · Regenerated on export",
+    "test-results": "Test Runner Artifacts · Regenerated on test run",
+    ".venv": "Python Virtual Environment · Recreate via python -m venv",
+    "venv": "Python Virtual Environment · Recreate via python -m venv",
+    "env": "Python Virtual Environment · Recreate via python -m venv",
 }
 
 MEDIA_EXTENSIONS = {
@@ -411,3 +430,199 @@ def mark_reminded(index: dict[str, Any], index_path: str | Path | None = None) -
     """Record a displayed reminder; this updates only the small JSON cache."""
     index["last_reminded_at"] = _utc_now().isoformat()
     save_storage_index(index, index_path)
+
+
+def find_project_reclaimable_dirs(project_path: str | Path) -> list[dict[str, Any]]:
+    """Scan a project and return a detailed list of all regenerable directories found."""
+    p_root = Path(project_path).resolve()
+    if not p_root.is_dir():
+        return []
+
+    items: list[dict[str, Any]] = []
+
+    for root, dirs, _ in os.walk(p_root, topdown=True, followlinks=False):
+        curr = Path(root)
+        dirs_to_check = list(dirs)
+        for d in dirs_to_check:
+            if d in REGENERABLE_DIRS:
+                dir_path = curr / d
+                d_size = 0
+                d_files = 0
+                try:
+                    for sub_root, _, sub_files in os.walk(dir_path, followlinks=False):
+                        for f in sub_files:
+                            f_path = Path(sub_root) / f
+                            try:
+                                if not f_path.is_symlink():
+                                    d_size += f_path.stat(follow_symlinks=False).st_size
+                                    d_files += 1
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+                try:
+                    rel_to_proj = dir_path.relative_to(p_root).as_posix()
+                except Exception:
+                    rel_to_proj = d
+
+                desc = REGENERABLE_DESCRIPTIONS.get(d, "Regenerable Cache / Dependency Folder")
+                items.append({
+                    "name": d,
+                    "relative_path": rel_to_proj,
+                    "path": str(dir_path),
+                    "size": d_size,
+                    "file_count": d_files,
+                    "description": desc,
+                })
+                # Don't descend into child folders of a regenerable directory
+                if d in dirs:
+                    dirs.remove(d)
+
+    items.sort(key=lambda x: x["size"], reverse=True)
+    return items
+
+
+def reclaim_project_space(
+    project_path: str | Path,
+    target_subdirs: list[str] | None = None,
+    projects_path: str | Path | None = None,
+    index_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Safely delete regenerable directories from a project and update the storage index."""
+    p_root = Path(project_path).resolve()
+    if not p_root.is_dir():
+        raise FileNotFoundError(f"Project directory not found: {project_path}")
+
+    all_reclaimable = find_project_reclaimable_dirs(p_root)
+    if target_subdirs is not None:
+        target_set = {t.strip().replace("\\", "/").rstrip("/").lower() for t in target_subdirs if t.strip()}
+        selected = [
+            item for item in all_reclaimable
+            if item["relative_path"].lower() in target_set or item["name"].lower() in target_set
+        ]
+    else:
+        selected = all_reclaimable
+
+    freed_bytes = 0
+    freed_files = 0
+    purged: list[str] = []
+    errors: list[str] = []
+
+    for item in selected:
+        d_path = Path(item["path"])
+        # Safety verification: ensure directory is strictly inside project root and name is in REGENERABLE_DIRS
+        if not d_path.resolve().is_relative_to(p_root):
+            continue
+        if d_path.name not in REGENERABLE_DIRS:
+            continue
+
+        if d_path.exists():
+            item_size = item["size"]
+            item_files = item["file_count"]
+            if robust_rmtree(str(d_path)):
+                freed_bytes += item_size
+                freed_files += item_files
+                purged.append(item["relative_path"])
+            else:
+                errors.append(f"Could not remove {item['relative_path']}")
+
+    # Rescan this project and update storage index
+    try:
+        refresh_partial(p_root, projects_path=projects_path, index_path=index_path)
+    except Exception:
+        pass
+
+    return {
+        "status": "success" if not errors else "partial_success",
+        "freed_bytes": freed_bytes,
+        "freed_files": freed_files,
+        "purged_directories": purged,
+        "errors": errors,
+        "remaining_reclaimable": sum(it["size"] for it in find_project_reclaimable_dirs(p_root)),
+    }
+
+
+def reclaim_bulk_space(
+    stale_only: bool = False,
+    days: int = DEFAULT_STALE_DAYS,
+    project_paths: list[str] | None = None,
+    projects_path: str | Path | None = None,
+    index_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Reclaim regenerable space across multiple projects."""
+    root = Path(projects_path or PROJECTS_PATH).resolve()
+    index = load_storage_index(index_path, projects_path=root) or build_storage_index(root)
+
+    if project_paths:
+        target_path_set = {str(Path(p).resolve()) for p in project_paths}
+        target_name_set = {p.lower().strip() for p in project_paths}
+        candidate_projects = [
+            p for p in index.get("projects", [])
+            if str(Path(p["path"]).resolve()) in target_path_set or
+               (p.get("slug") and p.get("slug").lower() in target_name_set) or
+               (p.get("name") and p.get("name").lower() in target_name_set)
+        ]
+    elif stale_only:
+        candidate_projects = stale_projects(index, stale_days=days)
+    else:
+        candidate_projects = [p for p in index.get("projects", []) if p.get("reclaimable_size", 0) > 0]
+
+    total_freed = 0
+    total_files = 0
+    cleaned_projects: list[dict[str, Any]] = []
+    log_entries: list[dict[str, Any]] = []
+
+    for proj in candidate_projects:
+        p_path = Path(proj["path"])
+        if not p_path.is_dir():
+            continue
+
+        reclaimable_items = find_project_reclaimable_dirs(p_path)
+        if not reclaimable_items:
+            continue
+
+        proj_freed = 0
+        proj_purged = []
+        for item in reclaimable_items:
+            d_path = Path(item["path"])
+            if d_path.exists() and d_path.name in REGENERABLE_DIRS and d_path.resolve().is_relative_to(p_path.resolve()):
+                size = item["size"]
+                file_count = item["file_count"]
+                if robust_rmtree(str(d_path)):
+                    proj_freed += size
+                    total_freed += size
+                    total_files += file_count
+                    proj_purged.append(item["relative_path"])
+                    log_entries.append({
+                        "project": proj.get("name", p_path.name),
+                        "folder": item["relative_path"],
+                        "freed_bytes": size,
+                        "status": "purged",
+                    })
+
+        if proj_purged:
+            cleaned_projects.append({
+                "name": proj.get("name", p_path.name),
+                "slug": proj.get("slug", p_path.name),
+                "path": str(p_path),
+                "freed_bytes": proj_freed,
+                "purged_directories": proj_purged,
+            })
+
+    # Global re-scan to refresh the entire storage index
+    new_index = refresh_storage_index(projects_path=root, index_path=index_path)
+
+    return {
+        "status": "success",
+        "total_freed_bytes": total_freed,
+        "total_files": total_files,
+        "projects_cleaned_count": len(cleaned_projects),
+        "cleaned_projects": cleaned_projects,
+        "log_entries": log_entries,
+        "new_storage_summary": {
+            "total_size": new_index.get("total_size", 0),
+            "reclaimable_size": new_index.get("reclaimable_size", 0),
+            "media_size": new_index.get("media_size", 0),
+        },
+    }

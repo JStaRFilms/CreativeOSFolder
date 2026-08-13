@@ -5,6 +5,8 @@
 import { api, formatBytes, cacheStore } from "../api.js";
 import { renderStorageTable } from "../components/storageTable.js";
 import { openProjectInspector } from "../components/modal.js";
+import { openReclaimModal, openBulkReclaimModal } from "../components/reclaimModal.js";
+import { icons } from "../icons.js";
 import { showToast } from "../components/toast.js";
 
 export async function renderStorage(container, options = {}) {
@@ -23,7 +25,11 @@ export async function renderStorage(container, options = {}) {
         <h1 class="page-title">Storage Inventory</h1>
         <p class="page-description">Inspect disk consumption, media assets, and cache directories</p>
       </div>
-      <div class="header-action-group">
+      <div class="header-action-group" id="storage-header-actions">
+        <button id="bulk-reclaim-btn" class="btn btn-danger" style="display: none; align-items: center; gap: 0.4rem;">
+          ${icons.zap}
+          <span id="bulk-reclaim-header-label">Reclaim Space</span>
+        </button>
         <button id="rescan-storage-btn" class="btn btn-secondary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
           Rescan
@@ -69,6 +75,20 @@ export async function renderStorage(container, options = {}) {
     const mediaPct = total > 0 ? ((media / total) * 100).toFixed(1) : 0;
     const reclaimablePct = total > 0 ? ((reclaimable / total) * 100).toFixed(1) : 0;
     const otherPct = total > 0 ? ((other / total) * 100).toFixed(1) : 0;
+
+    // Header Bulk Reclaim Button update
+    const bulkReclaimBtn = document.getElementById("bulk-reclaim-btn");
+    const bulkReclaimLabel = document.getElementById("bulk-reclaim-header-label");
+    if (bulkReclaimBtn) {
+      if (reclaimable > 0) {
+        bulkReclaimBtn.style.display = "inline-flex";
+        if (bulkReclaimLabel) {
+          bulkReclaimLabel.textContent = `Reclaim Space (${formatBytes(reclaimable)})`;
+        }
+      } else {
+        bulkReclaimBtn.style.display = "none";
+      }
+    }
 
     // Top 3 heaviest projects
     const topProjects = [...(data.projects || [])]
@@ -222,6 +242,23 @@ export async function renderStorage(container, options = {}) {
   }
 
   function attachRowInspectors(filteredList) {
+    // Reclaim button triggers
+    document.querySelectorAll(".row-reclaim-trigger").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const path = btn.getAttribute("data-path");
+        const slug = btn.getAttribute("data-slug");
+        const name = btn.getAttribute("data-name");
+        const target = filteredList.find(p => (path && p.path === path) || (slug && p.slug === slug) || (name && p.name === name));
+        if (target) {
+          openReclaimModal(target, () => {
+            loadData();
+          });
+        }
+      });
+    });
+
+    // Row inspection triggers
     document.querySelectorAll(".storage-row").forEach(row => {
       const handleInspect = () => {
         const path = row.getAttribute("data-path");
@@ -277,6 +314,13 @@ export async function renderStorage(container, options = {}) {
       showToast("Error loading storage index", "error");
     }
   }
+
+  const bulkReclaimBtn = document.getElementById("bulk-reclaim-btn");
+  bulkReclaimBtn?.addEventListener("click", () => {
+    openBulkReclaimModal({ projects: allProjects }, () => {
+      loadData();
+    });
+  });
 
   const rescanBtn = document.getElementById("rescan-storage-btn");
   rescanBtn?.addEventListener("click", async () => {

@@ -364,3 +364,43 @@ def test_update_config_paths_endpoint(client, temp_dir, monkeypatch):
     assert data["config"]["vault_path"] == str(new_vault)
 
 
+def test_storage_reclaim_endpoints(client, temp_projects_dir, monkeypatch):
+    monkeypatch.setattr("cos.commands.new.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.api.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.storage.PROJECTS_PATH", str(temp_projects_dir))
+
+    # Create project
+    create_resp = client.post("/api/projects", json={
+        "name": "Reclaim API Test",
+        "category": "Code",
+        "simple": True,
+    })
+    assert create_resp.status_code == 201
+    proj_path = Path(create_resp.json()["project"]["path"])
+
+    # Create dummy node_modules
+    nm = proj_path / "node_modules" / "dummy.js"
+    nm.parent.mkdir(parents=True, exist_ok=True)
+    nm.write_bytes(b"console.log(123);")
+
+    # 1. GET /api/storage/reclaimable
+    rec_resp = client.get(f"/api/storage/reclaimable?project={proj_path.name}")
+    assert rec_resp.status_code == 200
+    rec_data = rec_resp.json()
+    assert rec_data["total_reclaimable"] > 0
+    assert any(it["name"] == "node_modules" for it in rec_data["items"])
+
+    # 2. POST /api/storage/reclaim
+    purge_resp = client.post("/api/storage/reclaim", json={
+        "project": proj_path.name,
+        "targets": ["node_modules"],
+    })
+    assert purge_resp.status_code == 200
+    purge_data = purge_resp.json()
+    assert purge_data["status"] == "success"
+    assert purge_data["freed_bytes"] > 0
+    assert not (proj_path / "node_modules").exists()
+
+
+
