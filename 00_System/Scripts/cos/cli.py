@@ -134,7 +134,9 @@ def show_help_overview() -> None:
         "[cyan]cos storage[/cyan]\n"
         "[bold]3.[/bold] Find the largest media or code/cache projects:  "
         "[cyan]cos storage review --sort media[/cyan]  /  "
-        "[cyan]cos storage review --sort reclaimable[/cyan]\n\n"
+        "[cyan]cos storage review --sort reclaimable[/cyan]\n"
+        "[bold]4.[/bold] Rescan a single project instead of everything:  "
+        "[cyan]cos storage review --refresh --path Code/Clones/gemini-cli[/cyan]\n\n"
         "Storage review is read-only: it will not archive or delete any file.",
         title="[bold]Storage Quick Start[/bold]",
         border_style="cyan",
@@ -154,6 +156,8 @@ def show_help_overview() -> None:
         "  cos travel                          Copy project to shuttle drive\n"
         "  cos resurrect my-old-film           Restore archived project\n"
         "  cos storage                          Open the saved storage review\n"
+        "  cos storage review --refresh --path Code/Clones/gemini-cli\n"
+        "                                       Rescan one project fast\n"
         "  cos help storage                     Show storage commands and examples",
         title="[bold]Quick Reference[/bold]",
         border_style="dim",

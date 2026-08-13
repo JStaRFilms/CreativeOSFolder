@@ -54,6 +54,9 @@ Examples:
   cos storage                              Open the saved storage report
   cos storage review --sort media          Find media-heavy projects
   cos storage review --sort reclaimable    Find dependency/cache-heavy projects
+  cos storage review --refresh --path Code/Clones/gemini-cli
+                                           Rescan just one project (fast)
+  cos storage review --refresh             Rescan all projects
   cos storage schedule --time 01:00        Run a quiet weekly scan at 1:00 AM
   cos storage help                         Show this help from either direction
 
