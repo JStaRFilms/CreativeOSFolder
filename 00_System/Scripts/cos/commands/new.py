@@ -149,10 +149,12 @@ def create_project_structure(
     name: str,
     category: str = "Video",
     client: str | None = None,
+    destination_subpath: str | None = None,
     date: str | None = None,
     simple: bool = False,
     git: bool = False,
     target_root_override: str | None = None,
+    interactive: bool = False,
 ) -> dict[str, Any]:
     """Programmatically create a new project directory and metadata.
     
@@ -164,20 +166,25 @@ def create_project_structure(
         FileNotFoundError: if template structure is missing.
     """
     project_name = sanitize_path_input(name)
-    resolved_category = validate_category(category).title()
+    resolved_category = validate_category(category)
     date_prefix = get_date_slug(date)
     safe_name = project_name.replace(" ", "_")
     slug = f"{date_prefix}_{safe_name}"
 
     if client:
         sanitized_client = sanitize_path_input(client, max_length=50)
-        target_root = os.path.join(PROJECTS_PATH, "Clients", sanitized_client)
-        os.makedirs(target_root, exist_ok=True)
-    elif target_root_override:
-        target_root = target_root_override
+        base_root = os.path.join(PROJECTS_PATH, "Clients", sanitized_client)
     else:
         phys_cat = get_category_folder(resolved_category)
-        target_root = os.path.join(PROJECTS_PATH, phys_cat)
+        base_root = os.path.join(PROJECTS_PATH, phys_cat)
+
+    if target_root_override:
+        target_root = target_root_override
+    elif destination_subpath:
+        sub_parts = [sanitize_path_input(p) for p in destination_subpath.strip().replace("\\", "/").split("/") if p.strip()]
+        target_root = os.path.join(base_root, *sub_parts) if sub_parts else base_root
+    else:
+        target_root = base_root
 
     os.makedirs(target_root, exist_ok=True)
     target_dir = os.path.join(target_root, slug)
@@ -271,7 +278,7 @@ def create_project_structure(
         pass
 
     if git:
-        setup_git(target_dir, resolved_category)
+        setup_git(target_dir, resolved_category, interactive=interactive)
 
     logger.debug(f"Project created at: {target_dir}")
     meta["path"] = target_dir
@@ -294,6 +301,7 @@ def cmd_new(args: argparse.Namespace) -> None:
             simple=args.simple,
             git=args.git,
             target_root_override=target_root_override,
+            interactive=True,
         )
     except ValueError as e:
         console.print(f"[error]❌ Invalid input: {e}[/error]")

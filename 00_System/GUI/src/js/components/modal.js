@@ -124,7 +124,8 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
     const isStale = currentProject.is_stale || currentProject.status === "stale";
     const cat = currentProject.type || "Video";
     const catInfo = categoryConfig[cat] || {};
-    const folderTree = catInfo.folder_structure || ["00_Notes", "01_Source", "02_Build", "03_Exports"];
+    const tStruct = catInfo.template_structure || {};
+    const folderTree = Object.keys(tStruct).length > 0 ? Object.keys(tStruct) : (catInfo.folder_structure || ["00_Notes", "01_Footage", "02_Audio", "03_Exports"]);
 
     const fullPath = currentProject.path || "";
     const relPath = currentProject.relative_path || currentProject.slug || "";
@@ -201,7 +202,24 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                     <textarea id="edit-project-desc" class="form-textarea" rows="2" placeholder="Brief project summary or client deliverable goal...">${currentProject.description || ''}</textarea>
                   </div>
 
-                  <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+                  <!-- Filesystem Move / Rename Toggle -->
+                  <div class="form-group" style="margin-top: 1rem; padding: 0.85rem 1rem; border-radius: var(--radius-md); background-color: var(--bg-surface); border: 1px solid var(--border-subtle);">
+                    <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: 0.65rem; cursor: pointer; user-select: none;">
+                      <input type="checkbox" id="edit-sync-filesystem" style="margin-top: 0.2rem; accent-color: var(--color-primary); cursor: pointer; width: 15px; height: 15px;" />
+                      <div>
+                        <span style="font-weight: 600; font-size: 0.825rem; color: var(--text-primary);">Sync physical folder on disk</span>
+                        <p style="font-size: 0.725rem; color: var(--text-muted); margin-top: 0.15rem; line-height: 1.4;">
+                          Rename and/or move the actual project directory on your drive to match the new Title, Client, or Category.
+                        </p>
+                      </div>
+                    </label>
+                    <div id="fs-sync-preview-box" class="font-mono" style="margin-top: 0.65rem; padding: 0.45rem 0.65rem; border-radius: var(--radius-xs); background: var(--bg-app); border: 1px dashed var(--border-strong); font-size: 0.7rem; color: var(--text-secondary);">
+                      <span style="color: var(--color-primary); font-weight: 700;">Disk Action:</span>
+                      <span id="fs-sync-preview-msg">Metadata only (folder location on disk remains unchanged).</span>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.15rem;">
                     <button type="button" class="btn btn-secondary" id="cancel-edit-btn">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="save-metadata-btn">
                       ${icons.check} Save Changes
@@ -373,20 +391,69 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
       renderModal();
     });
 
-    // Save Metadata Form Submit
-    document.getElementById("edit-metadata-form")?.addEventListener("submit", async (e) => {
-      e.preventDefault();
+    // Live Path Preview Function
+    const updateFsPreview = () => {
       const nameInput = document.getElementById("edit-project-name");
       const clientInput = document.getElementById("edit-project-client");
       const categorySelect = document.getElementById("edit-project-category");
-      const tagsInput = document.getElementById("edit-project-tags");
-      const descInput = document.getElementById("edit-project-desc");
+      const syncCheck = document.getElementById("edit-sync-filesystem");
+      const previewMsg = document.getElementById("fs-sync-preview-msg");
 
-      const newName = nameInput?.value.trim();
+      if (!previewMsg) return;
+
+      const currentRel = currentProject.relative_path || currentProject.name;
+      const newTitle = nameInput?.value.trim() || currentProject.name;
+      const newClient = clientInput?.value.trim() || "";
+      const newCat = categorySelect?.value || currentProject.type || "Video";
+
+      // Extract date prefix if present
+      const origDir = currentProject.path ? currentProject.path.split(/[\\/]/).pop() : currentProject.name;
+      let datePrefix = "";
+      if (origDir && origDir.length >= 11 && origDir[4] === "-" && origDir[7] === "-" && origDir[10] === "_") {
+        datePrefix = origDir.substring(0, 11);
+      }
+      const newSlug = newTitle.replace(/\s+/g, "_");
+      const newDirName = datePrefix ? `${datePrefix}${newSlug}` : newSlug;
+
+      let targetRel = "";
+      if (newClient && newClient.toLowerCase() !== "none" && newClient.toLowerCase() !== "internal") {
+        targetRel = `Clients/${newClient}/${newDirName}`;
+      } else {
+        targetRel = `${newCat}/${newDirName}`;
+      }
+
+      if (syncCheck?.checked) {
+        if (targetRel !== currentRel) {
+          previewMsg.innerHTML = `<span style="color: var(--color-success); font-weight: 600;">Moving directory on disk:</span> <code>${currentRel}</code> &rarr; <code>${targetRel}</code>`;
+        } else {
+          previewMsg.innerHTML = `<span style="color: var(--text-muted);">Folder name already matches disk path: <code>${currentRel}</code></span>`;
+        }
+      } else {
+        previewMsg.innerHTML = `<span style="color: var(--text-muted);">Metadata only (folder location stays: <code>${currentRel}</code>)</span>`;
+      }
+    };
+
+    const nameInputEl = document.getElementById("edit-project-name");
+    const clientInputEl = document.getElementById("edit-project-client");
+    const categorySelectEl = document.getElementById("edit-project-category");
+    const syncCheckEl = document.getElementById("edit-sync-filesystem");
+
+    nameInputEl?.addEventListener("input", updateFsPreview);
+    clientInputEl?.addEventListener("input", updateFsPreview);
+    categorySelectEl?.addEventListener("change", updateFsPreview);
+    syncCheckEl?.addEventListener("change", updateFsPreview);
+
+    // Save Metadata Form Submit
+    document.getElementById("edit-metadata-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const newName = nameInputEl?.value.trim();
       if (!newName) {
         showToast("Project title cannot be empty", "error");
         return;
       }
+
+      const tagsInput = document.getElementById("edit-project-tags");
+      const descInput = document.getElementById("edit-project-desc");
 
       const tagsArray = (tagsInput?.value || "")
         .split(",")
@@ -395,10 +462,11 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
       const payload = {
         name: newName,
-        client: clientInput?.value.trim() || "None",
-        category: categorySelect?.value || currentProject.type,
+        client: clientInputEl?.value.trim() || "None",
+        category: categorySelectEl?.value || currentProject.type,
         tags: tagsArray,
         description: descInput?.value.trim() || "",
+        sync_filesystem: Boolean(syncCheckEl?.checked),
       };
 
       const saveBtn = document.getElementById("save-metadata-btn");
@@ -408,11 +476,19 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
       }
 
       try {
-        const res = await api.updateProject(currentProject.name || currentProject.slug, payload);
-        showToast("Project metadata updated successfully", "success");
+        const lookupKey = currentProject.relative_path || currentProject.slug || currentProject.name;
+        const res = await api.updateProject(lookupKey, payload);
+        if (res.moved) {
+          showToast(`Project updated and moved to ${res.project.relative_path}`, "success");
+        } else {
+          showToast("Project metadata updated successfully", "success");
+        }
+
         currentProject = {
           ...currentProject,
           ...res.project,
+          path: res.project.path || res.new_path || currentProject.path,
+          relative_path: res.project.relative_path || currentProject.relative_path,
           name: res.project.name,
           client: res.project.client,
           type: res.project.type,

@@ -126,7 +126,7 @@ export async function renderStorage(container, options = {}) {
           <span class="top-consumers-title">Top Storage Consumers</span>
           <div class="top-consumers-grid">
             ${topProjects.map((p, idx) => `
-              <div class="top-consumer-card" data-slug="${p.slug}">
+              <div class="top-consumer-card" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" tabindex="0" role="button" aria-label="Inspect ${p.name}">
                 <div class="consumer-rank font-mono">#${idx + 1}</div>
                 <div class="consumer-info">
                   <span class="consumer-name" title="${p.name}">${p.name}</span>
@@ -142,10 +142,24 @@ export async function renderStorage(container, options = {}) {
 
     // Attach click handlers to top consumer cards
     summaryContainer.querySelectorAll(".top-consumer-card").forEach(card => {
-      card.addEventListener("click", () => {
+      const handleInspect = () => {
+        const path = card.getAttribute("data-path");
         const slug = card.getAttribute("data-slug");
-        const target = allProjects.find(p => p.slug === slug || p.name === slug);
-        if (target) openProjectInspector(target, categoriesConfig);
+        const name = card.getAttribute("data-name");
+        const target = allProjects.find(p => (path && p.path === path) || (slug && p.slug === slug) || (name && p.name === name));
+        if (target) {
+          openProjectInspector(target, categoriesConfig, () => {
+            loadData();
+          });
+        }
+      };
+
+      card.addEventListener("click", handleInspect);
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleInspect();
+        }
       });
     });
   }
@@ -209,10 +223,24 @@ export async function renderStorage(container, options = {}) {
 
   function attachRowInspectors(filteredList) {
     document.querySelectorAll(".storage-row").forEach(row => {
-      row.addEventListener("click", () => {
+      const handleInspect = () => {
+        const path = row.getAttribute("data-path");
         const slug = row.getAttribute("data-slug");
-        const target = filteredList.find(p => p.slug === slug || p.name === slug);
-        if (target) openProjectInspector(target, categoriesConfig);
+        const name = row.getAttribute("data-name");
+        const target = filteredList.find(p => (path && p.path === path) || (slug && p.slug === slug) || (name && p.name === name));
+        if (target) {
+          openProjectInspector(target, categoriesConfig, () => {
+            loadData();
+          });
+        }
+      };
+
+      row.addEventListener("click", handleInspect);
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleInspect();
+        }
       });
     });
   }

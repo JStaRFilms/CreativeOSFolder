@@ -198,6 +198,19 @@ export const api = {
     method: "POST",
   }),
 
+  // Update Config Paths
+  updatePaths: async (pathsMap, moveFiles = false) => {
+    const res = await request("/config/paths", {
+      method: "PUT",
+      body: JSON.stringify({
+        paths: pathsMap,
+        move_files: moveFiles,
+      }),
+    });
+    cacheStore.invalidate("config");
+    return res;
+  },
+
   /**
    * Real-time Server-Sent Events (SSE) Sync Stream
    */

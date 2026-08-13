@@ -49,53 +49,54 @@ def get_export_month_path() -> str:
 
 def find_meta_in_cwd() -> Tuple[Optional[JSONDict], Optional[str]]:
     """
-    Search upward from current directory for .project_meta.json.
+    Search upward from current directory for .project_meta.json across deep subfolders.
     """
     current = os.getcwd()
-    
-    for _ in range(3):
+
+    # Search upward up to 15 levels to find the project root
+    for _ in range(15):
         meta_path = os.path.join(current, ".project_meta.json")
-        
+
         if os.path.exists(meta_path):
             try:
                 with open(meta_path, "r", encoding="utf-8-sig") as f:
                     meta = json.load(f)
-                
+
                 # Validate metadata structure
                 required_fields = {"name", "slug", "type", "created"}
                 if not required_fields.issubset(meta.keys()):
                     console.print(f"[warning]⚠️  Found metadata but missing required fields: {meta_path}[/warning]")
                     return None, None
-                
+
                 # Validate path is within PROJECTS_PATH
                 try:
                     abs_current = os.path.realpath(current)
                     abs_projects = os.path.realpath(PROJECTS_PATH)
-                    
+
                     if not abs_current.startswith(abs_projects):
                         console.print(f"[warning]⚠️  Found metadata outside projects path: {meta_path}[/warning]")
                         return None, None
                 except Exception:
                     pass  # If path validation fails, continue anyway
-                
+
                 return meta, current
-                
+
             except json.JSONDecodeError:
                 console.print(f"[warning]⚠️  Invalid JSON in metadata: {meta_path}[/warning]")
                 return None, None
             except IOError as e:
                 console.print(f"[warning]⚠️  Cannot read metadata: {e}[/warning]")
                 return None, None
-        
+
         # Move up one directory
         parent = os.path.dirname(current)
-        
-        # Check if we've reached the root (cross-platform)
-        if parent == current:
+
+        # Check if we've reached the root or stopped moving
+        if parent == current or not parent:
             break
-            
+
         current = parent
-    
+
     return None, None
 
 def get_smart_date(path: str) -> float:

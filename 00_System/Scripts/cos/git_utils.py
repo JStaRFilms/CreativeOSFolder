@@ -7,12 +7,12 @@ from rich.prompt import Confirm
 from .console import console
 from .config import TEMPLATES_PATH
 
-def setup_git(project_path: str, category: str) -> None:
+def setup_git(project_path: str, category: str, interactive: bool = False) -> None:
     """
-    Initialize a Git repository and add a .gitignore file.
+    Initialize a Git repository, add .gitignore, and make initial commit safely without blocking on stdin.
     """
     console.print("   [info]🔧 Initializing Git Repository...[/info]")
-    
+
     # 1. Run git init
     try:
         subprocess.run(["git", "init"], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
@@ -26,7 +26,7 @@ def setup_git(project_path: str, category: str) -> None:
     # 2. Copy .gitignore
     gitignore_src = os.path.join(TEMPLATES_PATH, "universal.gitignore")
     gitignore_dest = os.path.join(project_path, ".gitignore")
-    
+
     if os.path.exists(gitignore_src):
         shutil.copy2(gitignore_src, gitignore_dest)
     else:
@@ -35,19 +35,21 @@ def setup_git(project_path: str, category: str) -> None:
 
     console.print("   [success]✅ Git initialized & .gitignore added.[/success]")
 
-    # 3. Initial Commit Prompt
-    console.print("")
-    console.print("   [info]📦 An initial commit will stage all project files and commit them with the message:[/info]")
-    console.print("      [dim]\"Initial commit via CreativeOS Genesis\"[/dim]")
-    console.print("")
-    
-    if Confirm.ask("   Make initial commit now?", default=True):
+    # 3. Initial Commit (Non-blocking by default in GUI/API mode)
+    make_commit = True
+    if interactive and sys.stdin.isatty():
         try:
-            with console.status("[bold cyan]   Staging and committing...[/bold cyan]"):
-                subprocess.run(["git", "add", "."], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
-                subprocess.run(["git", "commit", "-m", "Initial commit via CreativeOS Genesis"], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
+            make_commit = Confirm.ask("   Make initial commit now?", default=True)
+        except Exception:
+            make_commit = True
+
+    if make_commit:
+        try:
+            subprocess.run(["git", "add", "."], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(["git", "commit", "-m", "Initial commit via CreativeOS Genesis"], cwd=project_path, check=True, stdout=subprocess.DEVNULL)
             console.print("   [success]✅ Initial commit complete.[/success]")
         except Exception as e:
-            console.print(f"   [error]❌ Initial commit failed: {e}[/error]")
+            console.print(f"   [warning]⚠️  Initial commit skipped/failed: {e}[/warning]")
     else:
-        console.print("   [dim]Skipped initial commit. You can commit manually later.[/dim]")
+        console.print("   [dim]Skipped initial commit.[/dim]")
+

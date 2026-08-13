@@ -22,12 +22,14 @@ from .config import (
     CONFIG_PATH,
     PROJECTS_PATH,
     ROOT_PATH,
+    TEMPLATES_PATH,
     VAULT_PATH,
     EXPORTS_PATH,
     DOWNLOADS_PATH,
     SHUTTLE_PATH,
     ARCHIVE_PATH,
     _load_config,
+    reload_config,
     logger,
 )
 from .category_config import (
@@ -166,9 +168,15 @@ class CreateProjectRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Project name")
     category: str = Field(default="Video", description="Project category")
     client: Optional[str] = Field(default=None, max_length=50, description="Optional client name")
+    destination_subpath: Optional[str] = Field(default=None, description="Optional custom subfolder path relative to projects root")
     date: Optional[str] = Field(default=None, description="Optional creation date (YYYY-MM-DD)")
     simple: bool = Field(default=False, description="Use minimal template")
     git: bool = Field(default=False, description="Initialize Git repository")
+
+
+class UpdatePathsRequest(BaseModel):
+    paths: dict[str, str] = Field(..., description="Dictionary of path keys and new filesystem paths")
+    move_files: bool = Field(default=False, description="Whether to migrate files to new location")
 
 
 class UpdateProjectRequest(BaseModel):
@@ -179,6 +187,8 @@ class UpdateProjectRequest(BaseModel):
     tags: Optional[list[str]] = Field(default=None, description="Project tags")
     status: Optional[str] = Field(default=None, description="Project workflow status")
     custom_meta: Optional[dict[str, Any]] = Field(default=None, description="Additional custom metadata")
+    sync_filesystem: bool = Field(default=False, description="Rename or move the physical project folder on disk")
+
 
 
 class OpenPathRequest(BaseModel):
@@ -293,6 +303,7 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
             name=req.name,
             category=req.category,
             client=req.client,
+            destination_subpath=req.destination_subpath,
             date=req.date,
             simple=req.simple,
             git=req.git,
@@ -326,9 +337,31 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
         ) from e
 
 
+def _compute_new_project_path(current_proj_path: Path, new_name: str, new_client: str, new_category: str) -> tuple[Path, str]:
+    """Compute target project directory and slug based on updated name, client, and category."""
+    original_dirname = current_proj_path.name
+    date_prefix = ""
+    if len(original_dirname) >= 11 and original_dirname[4] == "-" and original_dirname[7] == "-" and original_dirname[10] == "_":
+        date_prefix = original_dirname[:11]
+
+    clean_name = sanitize_path_input(new_name, max_length=100)
+    slugified_name = clean_name.replace(" ", "_")
+    new_dir_name = f"{date_prefix}{slugified_name}" if date_prefix else slugified_name
+
+    if new_client and new_client.lower() != "none" and new_client.lower() != "internal":
+        clean_client = validate_client_name(new_client.strip())
+        target_parent = Path(PROJECTS_PATH) / "Clients" / clean_client
+    else:
+        clean_cat = new_category.strip() or "Video"
+        target_parent = Path(PROJECTS_PATH) / clean_cat
+
+    target_path = target_parent / new_dir_name
+    return target_path, slugified_name
+
+
 @app.put("/api/projects/{project_name}")
 def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, Any]:
-    """Update project metadata (.project_meta.json) securely."""
+    """Update project metadata (.project_meta.json) and optionally sync filesystem on disk."""
     proj_path, meta = _find_project_dir(project_name)
     meta_file = proj_path / ".project_meta.json"
 
@@ -338,7 +371,7 @@ def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, An
 
     if req.client is not None:
         client_clean = req.client.strip()
-        if client_clean and client_clean.lower() != "none":
+        if client_clean and client_clean.lower() != "none" and client_clean.lower() != "internal":
             meta["client"] = validate_client_name(client_clean)
         else:
             meta["client"] = "None"
@@ -361,6 +394,48 @@ def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, An
 
     meta["last_updated"] = datetime.datetime.now().isoformat()
 
+    # Move or rename directory on disk if requested
+    moved_disk = False
+    if req.sync_filesystem:
+        target_path, new_slug = _compute_new_project_path(
+            proj_path,
+            new_name=meta.get("name", project_name),
+            new_client=meta.get("client", "None"),
+            new_category=meta.get("type", "Video"),
+        )
+        target_resolved = target_path.resolve()
+        current_resolved = proj_path.resolve()
+
+        if target_resolved != current_resolved:
+            if target_resolved.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Target folder already exists on disk: {target_resolved}",
+                )
+
+            target_resolved.parent.mkdir(parents=True, exist_ok=True)
+            old_parent = current_resolved.parent
+            try:
+                shutil.move(str(current_resolved), str(target_resolved))
+                proj_path = target_resolved
+                meta_file = target_resolved / ".project_meta.json"
+                meta["slug"] = new_slug
+                moved_disk = True
+
+                # Clean up empty parent client folder if left behind
+                try:
+                    if old_parent != Path(PROJECTS_PATH) and old_parent.exists():
+                        if not any(old_parent.iterdir()):
+                            old_parent.rmdir()
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.error(f"Failed to move project on disk: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to move project folder on disk: {e}",
+                ) from e
+
     try:
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2, ensure_ascii=False)
@@ -371,11 +446,23 @@ def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, An
             detail=f"Failed to update metadata file: {e}",
         ) from e
 
+    try:
+        rel_path = proj_path.relative_to(Path(PROJECTS_PATH)).as_posix()
+    except Exception:
+        rel_path = proj_path.name
+
     _invalidate_server_cache()
+
     return {
         "status": "success",
-        "message": f"Project '{meta.get('name', project_name)}' metadata updated successfully",
-        "project": meta,
+        "message": f"Project '{meta.get('name', project_name)}' updated{' and moved on disk' if moved_disk else ''} successfully",
+        "project": {
+            **meta,
+            "path": str(proj_path),
+            "relative_path": rel_path,
+        },
+        "moved": moved_disk,
+        "new_path": str(proj_path),
     }
 
 
@@ -762,16 +849,46 @@ def refresh_storage() -> dict[str, Any]:
     }
 
 
+def _load_template_structures() -> dict[str, Any]:
+    """Load structure.json for all templates."""
+    structures: dict[str, Any] = {}
+    templates_dir = Path(TEMPLATES_PATH)
+    if templates_dir.exists():
+        for item in templates_dir.iterdir():
+            if item.is_dir():
+                s_file = item / "structure.json"
+                if s_file.exists():
+                    try:
+                        with open(s_file, "r", encoding="utf-8") as f:
+                            structures[item.name] = json.load(f)
+                    except Exception:
+                        pass
+    return structures
+
+
 @app.get("/api/categories")
 def get_categories_endpoint() -> dict[str, Any]:
-    """Get all dynamic categories, enabled list, and icons."""
+    """Get all dynamic categories, enabled list, icons, and real template structures."""
     all_cats = get_categories()
     enabled_cats = get_enabled_categories()
+    templates = _load_template_structures()
+
+    enriched_cats = {}
+    for cat_name, cat_data in all_cats.items():
+        t_name = cat_data.get("template", "")
+        t_struct = templates.get(t_name, {})
+        enriched_cats[cat_name] = {
+            **cat_data,
+            "template_structure": t_struct,
+        }
+
     return {
-        "categories": all_cats,
+        "categories": enriched_cats,
         "enabled": enabled_cats,
         "default_category": get_default_category(),
         "simple_template": get_simple_template(),
+        "simple_structure": templates.get(get_simple_template(), {"00_Notes": ["Notes.md", "Client_Links.md"]}),
+        "template_structures": templates,
     }
 
 
@@ -792,6 +909,60 @@ def get_config_endpoint() -> dict[str, Any]:
         "config": raw_config,
         "paths": paths_status,
         "version": __version__,
+    }
+
+
+@app.put("/api/config/paths")
+def update_config_paths(req: UpdatePathsRequest) -> dict[str, Any]:
+    """Update configured system directory paths with optional migration."""
+    config = _load_config()
+    allowed_keys = {
+        "vault_path", "exports_path", "archive_path", "shuttle_path", "downloads_path", "projects_path"
+    }
+
+    migrated = []
+    for key, new_path_str in req.paths.items():
+        if key not in allowed_keys:
+            continue
+        new_path_str = new_path_str.strip()
+        if not new_path_str:
+            continue
+
+        old_path_str = config.get(key)
+        new_path = Path(new_path_str)
+
+        if req.move_files and old_path_str and old_path_str != new_path_str and os.path.exists(old_path_str):
+            try:
+                new_path.mkdir(parents=True, exist_ok=True)
+                for item in Path(old_path_str).iterdir():
+                    dest = new_path / item.name
+                    if not dest.exists():
+                        if item.is_dir():
+                            shutil.copytree(item, dest)
+                        else:
+                            shutil.copy2(item, dest)
+                migrated.append(f"{key}: {old_path_str} -> {new_path_str}")
+            except Exception as e:
+                logger.warning(f"Could not migrate files for {key}: {e}")
+        else:
+            try:
+                new_path.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+
+        config[key] = str(new_path)
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4)
+
+    reload_config()
+    _invalidate_server_cache()
+
+    return {
+        "status": "success",
+        "message": "System paths updated successfully",
+        "config": config,
+        "migrated": migrated,
     }
 
 

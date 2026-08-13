@@ -82,7 +82,7 @@ export async function renderDashboard(container) {
   let catData = cachedCats || { categories: {} };
   let selectedCategory = "All";
   let selectedClient = null;
-  let currentViewMode = "grid";
+  let currentViewMode = localStorage.getItem("cos_dashboard_view_mode") || "grid";
 
   function processAndRender() {
     if (!projects || projects.length === 0) return;
@@ -201,8 +201,17 @@ export async function renderDashboard(container) {
     const gridBtn = document.getElementById("view-grid-btn");
     const listBtn = document.getElementById("view-list-btn");
 
+    if (currentViewMode === "list") {
+      listBtn?.classList.add("active");
+      gridBtn?.classList.remove("active");
+    } else {
+      gridBtn?.classList.add("active");
+      listBtn?.classList.remove("active");
+    }
+
     gridBtn?.addEventListener("click", () => {
       currentViewMode = "grid";
+      localStorage.setItem("cos_dashboard_view_mode", "grid");
       gridBtn.classList.add("active");
       listBtn?.classList.remove("active");
       applyFilters();
@@ -210,6 +219,7 @@ export async function renderDashboard(container) {
 
     listBtn?.addEventListener("click", () => {
       currentViewMode = "list";
+      localStorage.setItem("cos_dashboard_view_mode", "list");
       listBtn.classList.add("active");
       gridBtn?.classList.remove("active");
       applyFilters();

@@ -81,7 +81,7 @@ export async function renderExplorer(container, initialPath = "") {
   let currentPath = initialPath;
   let currentParentPath = null;
   let currentEntries = [];
-  let viewMode = "grid";
+  let viewMode = localStorage.getItem("cos_explorer_view_mode") || "grid";
 
   // Elements
   const breadcrumbsEl = document.getElementById("explorer-breadcrumbs");
@@ -338,8 +338,17 @@ export async function renderExplorer(container, initialPath = "") {
     }
   });
 
+  if (viewMode === "list") {
+    listBtn?.classList.add("active");
+    gridBtn?.classList.remove("active");
+  } else {
+    gridBtn?.classList.add("active");
+    listBtn?.classList.remove("active");
+  }
+
   gridBtn?.addEventListener("click", () => {
     viewMode = "grid";
+    localStorage.setItem("cos_explorer_view_mode", "grid");
     gridBtn.classList.add("active");
     listBtn?.classList.remove("active");
     renderEntries();
@@ -347,6 +356,7 @@ export async function renderExplorer(container, initialPath = "") {
 
   listBtn?.addEventListener("click", () => {
     viewMode = "list";
+    localStorage.setItem("cos_explorer_view_mode", "list");
     listBtn.classList.add("active");
     gridBtn?.classList.remove("active");
     renderEntries();

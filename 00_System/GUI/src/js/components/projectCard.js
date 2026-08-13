@@ -53,12 +53,12 @@ export function renderProjectCard(project, maxProjectSize = 1) {
 
       <div class="card-bottom-row">
         <div class="card-badges">
-          <span class="card-cat-badge">${cat}</span>
           ${project.reclaimable_size > 0 ? `
             <span class="card-cache-badge" title="Reclaimable build cache">
               ${icons.zap} ${formatBytes(project.reclaimable_size)}
             </span>
           ` : ''}
+          <span class="card-cat-badge">${cat}</span>
         </div>
         <span class="card-inspect-action">
           <span>Inspect</span>

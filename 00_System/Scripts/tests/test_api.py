@@ -1,5 +1,5 @@
-"""Tests for the CreativeOS FastAPI backend."""
-
+import json
+from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 from cos.api import app
@@ -179,6 +179,8 @@ def test_update_project_metadata(client, temp_projects_dir, monkeypatch):
     monkeypatch.setattr("cos.commands.new.PROJECTS_PATH", str(temp_projects_dir))
     monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))
     monkeypatch.setattr("cos.api.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.storage.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.api.refresh_storage_index", lambda *args, **kwargs: {}, raising=False)
 
     # Create project first
     client.post("/api/projects", json={
@@ -188,20 +190,37 @@ def test_update_project_metadata(client, temp_projects_dir, monkeypatch):
         "simple": True,
     })
 
-    # Update metadata
+    # 1. Update metadata only (sync_filesystem=False)
     update_resp = client.put("/api/projects/Meta Test Project", json={
         "name": "Updated Meta Project",
         "client": "Beta Corp",
         "description": "A new summary",
         "tags": ["film", "edit"],
+        "sync_filesystem": False,
     })
     assert update_resp.status_code == 200
     data = update_resp.json()
     assert data["status"] == "success"
+    assert data["moved"] is False
     assert data["project"]["name"] == "Updated Meta Project"
     assert data["project"]["client"] == "Beta Corp"
     assert data["project"]["description"] == "A new summary"
     assert "film" in data["project"]["tags"]
+
+    # 2. Update with physical folder move (sync_filesystem=True)
+    move_resp = client.put("/api/projects/Updated Meta Project", json={
+        "name": "Renamed Physical Project",
+        "client": "Omega Client",
+        "sync_filesystem": True,
+    })
+    assert move_resp.status_code == 200
+    move_data = move_resp.json()
+    assert move_data["status"] == "success"
+    assert move_data["moved"] is True
+    assert "Omega Client" in move_data["new_path"]
+    assert "Renamed_Physical_Project" in move_data["new_path"]
+    assert Path(move_data["new_path"]).exists()
+
 
 
 def test_archive_and_resurrect_endpoints(client, temp_projects_dir, temp_dir, monkeypatch):
@@ -263,4 +282,57 @@ def test_sync_stream_endpoint(client, temp_projects_dir, temp_dir, monkeypatch):
     assert "text/event-stream" in resp.headers.get("content-type", "")
     content = resp.text
     assert "data:" in content
+
+
+def test_create_project_in_subfolder(client, temp_projects_dir, monkeypatch):
+    monkeypatch.setattr("cos.commands.new.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.config.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.api.PROJECTS_PATH", str(temp_projects_dir))
+    monkeypatch.setattr("cos.storage.PROJECTS_PATH", str(temp_projects_dir))
+
+    resp = client.post("/api/projects", json={
+        "name": "Nested Subproject",
+        "category": "Video",
+        "destination_subpath": "Clients/MegaClient/Campaign_2026/Subprojects",
+        "simple": True,
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "success"
+    project_path = Path(data["project"]["path"])
+    assert "Clients" in project_path.parts
+    assert "MegaClient" in project_path.parts
+    assert "Campaign_2026" in project_path.parts
+    assert "Subprojects" in project_path.parts
+    assert project_path.exists()
+    assert (project_path / ".project_meta.json").exists()
+
+
+def test_update_config_paths_endpoint(client, temp_dir, monkeypatch):
+    test_config_path = temp_dir / "test_config.json"
+    dummy_config = {
+        "root_path": str(temp_dir),
+        "projects_path": str(temp_dir / "Projects"),
+        "vault_path": str(temp_dir / "Vault"),
+        "exports_path": str(temp_dir / "Exports"),
+        "version": "1.3"
+    }
+    with open(test_config_path, "w", encoding="utf-8") as f:
+        json.dump(dummy_config, f, indent=4)
+
+    monkeypatch.setattr("cos.api.CONFIG_PATH", str(test_config_path))
+    monkeypatch.setattr("cos.config.CONFIG_PATH", str(test_config_path))
+
+    new_vault = temp_dir / "NewVault"
+    resp = client.put("/api/config/paths", json={
+        "paths": {
+            "vault_path": str(new_vault)
+        },
+        "move_files": False
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert data["config"]["vault_path"] == str(new_vault)
+
 

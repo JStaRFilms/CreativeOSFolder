@@ -44,7 +44,32 @@ export async function renderNewProject(container) {
               <div class="form-group">
                 <label class="form-label" for="project-client">Client (Optional)</label>
                 <input type="text" id="project-client" class="form-input" placeholder="e.g. Nike, Acme Corp, Sony" autocomplete="off" />
-                <span class="form-hint">Places the project in <code>01_Projects/Clients/[Client]/</code></span>
+                <span class="form-hint">Places project inside <code>01_Projects/Clients/[Client]/</code></span>
+              </div>
+            </div>
+
+            <!-- Destination Folder Mode -->
+            <div class="form-group" style="padding: 1rem; border-radius: var(--radius-md); background: var(--bg-surface); border: 1px solid var(--border-subtle);">
+              <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: 0.65rem; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="project-custom-subfolder-toggle" style="margin-top: 0.2rem; accent-color: var(--color-primary); width: 15px; height: 15px;" />
+                <div>
+                  <span style="font-weight: 600; font-size: 0.825rem; color: var(--text-primary);">Nest inside specific subfolder or child hierarchy</span>
+                  <p style="font-size: 0.725rem; color: var(--text-muted); margin-top: 0.15rem; line-height: 1.4;">
+                    Nest this project inside a sub-directory under the selected category or client (e.g. <code>2026_Campaigns/Series_1</code>).
+                  </p>
+                </div>
+              </label>
+
+              <div id="custom-subfolder-box" style="display: none; margin-top: 0.75rem;">
+                <div style="font-size: 0.75rem; margin-bottom: 0.35rem; color: var(--text-secondary);">
+                  <span>Base starting location: </span>
+                  <strong id="subfolder-base-badge" class="font-mono" style="color: var(--color-primary);">01_Projects/Video/</strong>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <input type="text" id="project-subfolder-input" class="form-input font-mono" placeholder="e.g. 2026_Campaigns/Summer or Experiments/Phase1" style="font-size: 0.8rem;" list="existing-folders-list" />
+                  <datalist id="existing-folders-list"></datalist>
+                </div>
+                <span class="form-hint" style="font-size: 0.7rem;">Enter any folder structure inside the base; all intermediate directories will be generated automatically.</span>
               </div>
             </div>
 
@@ -68,7 +93,7 @@ export async function renderNewProject(container) {
               <label class="switch-row">
                 <div class="switch-info">
                   <span class="switch-title">Minimal Template</span>
-                  <span class="switch-desc">Use minimal 4-folder skeleton instead of full category structure</span>
+                  <span class="switch-desc">Use streamlined notes-only scaffold (<code>00_Notes/</code>) instead of full category structure</span>
                 </div>
                 <input type="checkbox" id="project-simple" class="toggle-checkbox" />
               </label>
@@ -102,11 +127,34 @@ export async function renderNewProject(container) {
 
   let categoriesData = {};
   let defaultCategory = "Video";
+  let simpleStructure = { "00_Notes": ["Notes.md", "Client_Links.md"] };
+
+  // Load existing folder paths for datalist suggestions
+  try {
+    const projects = await api.getProjects();
+    const folderSet = new Set();
+    projects.forEach(p => {
+      if (p.relative_path) {
+        const parts = p.relative_path.split("/");
+        parts.pop(); // Remove project name to get parent folder
+        if (parts.length > 1) {
+          folderSet.add(parts.slice(1).join("/"));
+        }
+      }
+    });
+    const datalist = document.getElementById("existing-folders-list");
+    if (datalist) {
+      datalist.innerHTML = Array.from(folderSet).sort().map(f => `<option value="${f}"></option>`).join("");
+    }
+  } catch (err) {
+    console.warn("Could not load folder suggestions:", err);
+  }
 
   try {
     const data = await api.getCategories();
     categoriesData = data.categories || {};
     defaultCategory = data.default_category || "Video";
+    if (data.simple_structure) simpleStructure = data.simple_structure;
 
     const selectEl = document.getElementById("project-category");
     if (selectEl) {
@@ -127,11 +175,24 @@ export async function renderNewProject(container) {
   const dateInput = document.getElementById("project-date");
   const gitCheckbox = document.getElementById("project-git");
   const simpleCheckbox = document.getElementById("project-simple");
+  const customSubfolderToggle = document.getElementById("project-custom-subfolder-toggle");
+  const customSubfolderBox = document.getElementById("custom-subfolder-box");
+  const subfolderInput = document.getElementById("project-subfolder-input");
+  const subfolderBaseBadge = document.getElementById("subfolder-base-badge");
   const previewSlugPath = document.getElementById("preview-slug-path");
   const previewCategoryTag = document.getElementById("preview-category-tag");
   const treeOutput = document.getElementById("scaffold-tree-output");
   const form = document.getElementById("new-project-form");
   const submitBtn = document.getElementById("submit-project-btn");
+
+  customSubfolderToggle?.addEventListener("change", () => {
+    if (customSubfolderBox) {
+      customSubfolderBox.style.display = customSubfolderToggle.checked ? "block" : "none";
+    }
+    updateScaffoldPreview();
+  });
+
+  subfolderInput?.addEventListener("input", updateScaffoldPreview);
 
   function updateScaffoldPreview() {
     const rawName = (nameInput?.value || "").trim() || "My_New_Project";
@@ -152,55 +213,94 @@ export async function renderNewProject(container) {
     const client = (clientInput?.value || "").trim();
     const isSimple = simpleCheckbox?.checked || false;
     const isGit = gitCheckbox?.checked || false;
+    const useCustomSubfolder = customSubfolderToggle?.checked || false;
+    const customSubfolderVal = (subfolderInput?.value || "").trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 
-    let targetPath = `01_Projects/${catFolder}/${slug}`;
+    let baseRel = `01_Projects/${catFolder}`;
     if (client) {
       const safeClient = client.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_");
-      targetPath = `01_Projects/Clients/${safeClient}/${slug}`;
+      baseRel = `01_Projects/Clients/${safeClient}`;
+    }
+
+    if (subfolderBaseBadge) subfolderBaseBadge.textContent = `${baseRel}/`;
+
+    let targetPath = `${baseRel}/${slug}`;
+    if (useCustomSubfolder && customSubfolderVal) {
+      targetPath = `${baseRel}/${customSubfolderVal}/${slug}`;
     }
 
     if (previewSlugPath) previewSlugPath.textContent = targetPath;
-    if (previewCategoryTag) previewCategoryTag.textContent = selectedCat;
+    if (previewCategoryTag) previewCategoryTag.textContent = isSimple ? `${selectedCat} (Minimal)` : selectedCat;
 
-    // Subfolders list
-    let subfolders = [];
+    // Build real structure nodes from backend template structure
+    let struct = {};
     if (isSimple) {
-      subfolders = ["00_Notes", "01_Source", "02_Build", "03_Exports"];
+      struct = simpleStructure;
+    } else if (catConfig.template_structure && Object.keys(catConfig.template_structure).length > 0) {
+      struct = catConfig.template_structure;
     } else {
-      subfolders = catConfig.folder_structure || ["00_Notes", "01_Source", "02_Build", "03_Exports"];
+      const list = catConfig.folder_structure || ["00_Notes", "01_Footage", "02_Audio", "03_Exports"];
+      list.forEach(f => { struct[f] = []; });
     }
 
     if (treeOutput) {
-      treeOutput.innerHTML = `
+      const folders = Object.keys(struct);
+      let treeHtml = `
         <div class="tree-root">
           <span class="tree-icon">${icons.folder}</span>
           <strong>${slug}</strong>
         </div>
         <div class="tree-branches">
-          ${subfolders.map((folder, idx) => `
-            <div class="tree-node">
-              <span class="tree-line">${idx === subfolders.length - 1 && !isGit ? '└─' : '├─'}</span>
-              <span class="tree-folder-icon">${icons.folder}</span>
-              <span class="tree-name ${folder === '00_Notes' ? 'notes-highlight' : ''}">${folder}</span>
-              ${folder === '00_Notes' ? '<span class="tree-tag-obsidian">Obsidian Brain</span>' : ''}
-            </div>
-          `).join("")}
-          <div class="tree-node">
+      `;
+
+      folders.forEach((folder, fIdx) => {
+        const contents = struct[folder] || [];
+        const isNotes = folder === "00_Notes";
+        treeHtml += `
+          <div class="tree-node" style="margin-top: 0.2rem;">
             <span class="tree-line">├─</span>
-            <span class="tree-file-icon">${icons.file}</span>
-            <span class="tree-name font-mono">meta.json</span>
-            <span class="tree-tag-meta">Metadata</span>
+            <span class="tree-folder-icon">${icons.folder}</span>
+            <span class="tree-name ${isNotes ? 'notes-highlight' : ''}">${folder}/</span>
+            ${isNotes ? '<span class="tree-tag-obsidian">Obsidian Brain</span>' : ''}
           </div>
-          ${isGit ? `
-            <div class="tree-node">
-              <span class="tree-line">└─</span>
-              <span class="tree-file-icon">${icons.git}</span>
-              <span class="tree-name font-mono">.git/ &amp; .gitignore</span>
-              <span class="tree-tag-git">Git</span>
+        `;
+
+        contents.forEach((item, iIdx) => {
+          const isLastItem = iIdx === contents.length - 1;
+          const isFile = item.includes(".");
+          treeHtml += `
+            <div class="tree-node" style="padding-left: 1.5rem; opacity: 0.85;">
+              <span class="tree-line">${isLastItem ? '└─' : '├─'}</span>
+              <span class="tree-file-icon">${isFile ? icons.file : icons.folder}</span>
+              <span class="tree-name font-mono" style="font-size: 0.725rem;">${item}</span>
             </div>
-          ` : ''}
+          `;
+        });
+      });
+
+      // Show metadata file
+      treeHtml += `
+        <div class="tree-node">
+          <span class="tree-line">${!isGit ? '└─' : '├─'}</span>
+          <span class="tree-file-icon">${icons.file}</span>
+          <span class="tree-name font-mono">.project_meta.json</span>
+          <span class="tree-tag-meta">Metadata</span>
         </div>
       `;
+
+      if (isGit) {
+        treeHtml += `
+          <div class="tree-node">
+            <span class="tree-line">└─</span>
+            <span class="tree-file-icon">${icons.git}</span>
+            <span class="tree-name font-mono">.git/ &amp; .gitignore</span>
+            <span class="tree-tag-git">Git</span>
+          </div>
+        `;
+      }
+
+      treeHtml += `</div>`;
+      treeOutput.innerHTML = treeHtml;
     }
   }
 
@@ -222,10 +322,14 @@ export async function renderNewProject(container) {
       Scaffolding...
     `;
 
+    const useCustomSubfolder = customSubfolderToggle?.checked || false;
+    const subfolderVal = (subfolderInput?.value || "").trim();
+
     const payload = {
       name: nameInput.value.trim(),
       category: categorySelect?.value || defaultCategory,
       client: clientInput?.value.trim() || null,
+      destination_subpath: useCustomSubfolder && subfolderVal ? subfolderVal : null,
       date: dateInput?.value || null,
       git: gitCheckbox?.checked || false,
       simple: simpleCheckbox?.checked || false,

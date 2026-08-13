@@ -47,7 +47,7 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
     const catIconSvg = getCategoryIconSvg(cat);
 
     return `
-      <tr class="storage-row" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}">
+      <tr class="storage-row" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" tabindex="0" role="button" aria-label="Inspect ${p.name}">
         <td>
           <div class="cell-project-name">
             <span class="cell-cat-icon" aria-hidden="true">${catIconSvg}</span>
@@ -77,6 +77,12 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
         </td>
         <td class="cell-mono">${p.file_count || 0}</td>
         <td class="cell-mono">${p.last_meaningful_update ? p.last_meaningful_update.substring(0, 10) : "—"}</td>
+        <td style="text-align: right;">
+          <button class="btn btn-secondary btn-sm row-inspect-btn" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Inspect ${p.name}">
+            <span>Inspect</span>
+            ${icons.chevronRight}
+          </button>
+        </td>
       </tr>
     `;
   }).join("");
@@ -95,6 +101,7 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
               <th class="${getThClass("reclaimable_size")}" data-sort="reclaimable_size">Reclaimable ${getSortIcon("reclaimable_size")}</th>
               <th class="${getThClass("file_count")}" data-sort="file_count">Files ${getSortIcon("file_count")}</th>
               <th class="${getThClass("last_meaningful_update")}" data-sort="last_meaningful_update">Last Active ${getSortIcon("last_meaningful_update")}</th>
+              <th style="text-align: right;">Action</th>
             </tr>
           </thead>
           <tbody>
