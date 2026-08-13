@@ -2,12 +2,17 @@
  * Storage Overview View — Visual Analytics & Inventory
  */
 
-import { api, formatBytes } from "../api.js";
+import { api, formatBytes, cacheStore } from "../api.js";
 import { renderStorageTable } from "../components/storageTable.js";
 import { openProjectInspector } from "../components/modal.js";
 import { showToast } from "../components/toast.js";
 
-export async function renderStorage(container) {
+export async function renderStorage(container, options = {}) {
+  const targetProject = options.project ? decodeURIComponent(options.project).trim() : "";
+  const cachedStorage = cacheStore.get("storage");
+  const cachedCats = cacheStore.get("categories");
+  const hasCache = Boolean(cachedStorage && cachedStorage.projects);
+
   container.innerHTML = `
     <div class="page-header">
       <div>
@@ -39,10 +44,12 @@ export async function renderStorage(container) {
     </div>
 
     <div id="storage-table-container">
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <p>Loading storage inventory metrics...</p>
-      </div>
+      ${hasCache ? '' : `
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading storage inventory metrics...</p>
+        </div>
+      `}
     </div>
   `;
 
@@ -160,6 +167,27 @@ export async function renderStorage(container) {
       tableContainer.innerHTML = renderStorageTable(filtered, currentSort);
       attachSortHandlers();
       attachRowInspectors(filtered);
+
+      if (targetProject) {
+        const rows = [...document.querySelectorAll(".storage-row")];
+        const match = rows.find(r => {
+          const s = r.getAttribute("data-slug") || "";
+          const n = r.getAttribute("data-name") || "";
+          const p = r.getAttribute("data-path") || "";
+          const target = targetProject.toLowerCase();
+          return s.toLowerCase() === target ||
+                 n.toLowerCase() === target ||
+                 p.toLowerCase() === target ||
+                 p.toLowerCase().includes(target);
+        });
+
+        if (match) {
+          match.classList.add("storage-row-highlighted");
+          setTimeout(() => {
+            match.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 150);
+        }
+      }
     }
   }
 
@@ -191,17 +219,26 @@ export async function renderStorage(container) {
 
   async function loadData() {
     try {
-      const [storageData, catData] = await Promise.all([
-        api.getStorage(),
-        api.getCategories(),
-      ]);
-      categoriesConfig = catData.categories || {};
-      allProjects = storageData.projects || [];
-      updateSummary(storageData);
-      renderTable();
+      if (hasCache) {
+        categoriesConfig = cachedCats?.categories || {};
+        allProjects = cachedStorage.projects || [];
+        updateSummary(cachedStorage);
+        renderTable();
+      }
+
+      api.getStorageSWR((freshStorage) => {
+        allProjects = freshStorage.projects || [];
+        updateSummary(freshStorage);
+        renderTable();
+      });
+
+      api.getCategoriesSWR((freshCats) => {
+        categoriesConfig = freshCats.categories || {};
+        renderTable();
+      });
     } catch (err) {
       const tableContainer = document.getElementById("storage-table-container");
-      if (tableContainer) {
+      if (tableContainer && allProjects.length === 0) {
         tableContainer.innerHTML = `
           <div class="empty-state" style="border-color: var(--color-danger);">
             <h3 style="color: var(--color-danger); margin-bottom: 0.35rem; font-size: 1rem;">Failed to Index Storage</h3>

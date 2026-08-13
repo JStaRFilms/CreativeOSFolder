@@ -11,7 +11,7 @@ export async function renderExplorer(container, initialPath = "") {
     <div class="page-header">
       <div>
         <div class="page-eyebrow">
-          <span class="studio-status-indicator" style="background-color: var(--color-accent-cyan);"></span>
+          <span class="studio-status-indicator" style="background-color: var(--text-primary);"></span>
           <span>WORKSPACE FILE EXPLORER</span>
         </div>
         <h1 class="page-title">Workspace Explorer</h1>
@@ -19,7 +19,7 @@ export async function renderExplorer(container, initialPath = "") {
       </div>
 
       <div class="header-action-group">
-        <button id="explorer-open-os-btn" class="btn btn-secondary" title="Open current folder in Windows Explorer">
+        <button id="explorer-open-os-btn" class="btn btn-secondary" title="Open current folder in OS file manager">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           Open in OS
         </button>
@@ -125,8 +125,8 @@ export async function renderExplorer(container, initialPath = "") {
         contentAreaEl.innerHTML = `
           <div class="empty-state" style="border-color: var(--color-danger);">
             <h3 style="color: var(--color-danger); margin-bottom: 0.35rem; font-size: 1.05rem;">Cannot Access Directory</h3>
-            <p style="font-size: 0.85rem;">${err.message}</p>
-            <button class="btn btn-secondary" id="explorer-error-home-btn" style="margin-top: 1rem;">Back to Projects Root</button>
+            <p style="font-size: 0.85rem; margin-bottom: 1rem;">${err.message}</p>
+            <button class="btn btn-secondary" id="explorer-error-home-btn">Back to Projects Root</button>
           </div>
         `;
         document.getElementById("explorer-error-home-btn")?.addEventListener("click", () => {
@@ -145,7 +145,6 @@ export async function renderExplorer(container, initialPath = "") {
 
     let accum = "";
     const items = parts.map((part, index) => {
-      // Reconstruct path appropriately
       if (index === 0 && part.endsWith(":")) {
         accum = part;
       } else {
@@ -190,9 +189,21 @@ export async function renderExplorer(container, initialPath = "") {
         <div class="empty-state">
           <div style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--text-muted);">${icons.folder}</div>
           <h3 style="margin-bottom: 0.35rem; color: var(--text-primary); font-size: 1.05rem;">${query ? 'No Matching Items' : 'Directory is Empty'}</h3>
-          <p style="font-size: 0.85rem;">${query ? `No items matching "${query}" in this folder` : 'This workspace folder has no tracked files'}</p>
+          <p style="font-size: 0.85rem; margin-bottom: 1.25rem;">${query ? `No items matching "${query}" in this folder` : 'This workspace folder has no tracked files'}</p>
+          ${currentParentPath ? `
+            <button class="btn btn-secondary" id="explorer-empty-back-btn" style="margin: 0 auto; display: inline-flex; align-items: center; gap: 0.45rem;">
+              ${icons.arrowLeft}
+              <span>Go Back One Level</span>
+            </button>
+          ` : ''}
         </div>
       `;
+
+      if (currentParentPath) {
+        document.getElementById("explorer-empty-back-btn")?.addEventListener("click", () => {
+          loadDirectory(currentParentPath);
+        });
+      }
       return;
     }
 
@@ -271,7 +282,6 @@ export async function renderExplorer(container, initialPath = "") {
       const itemPath = el.getAttribute("data-path");
       const isDir = el.getAttribute("data-isdir") === "true";
 
-      // Double click or Enter
       const triggerAction = async () => {
         if (isDir) {
           loadDirectory(itemPath);
@@ -297,7 +307,6 @@ export async function renderExplorer(container, initialPath = "") {
         }
       });
 
-      // Open button on grid cards
       el.querySelector(".item-open-btn")?.addEventListener("click", (e) => {
         e.stopPropagation();
         triggerAction();

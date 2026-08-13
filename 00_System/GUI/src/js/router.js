@@ -48,6 +48,9 @@ export function initRouter(containerId = "app-main") {
     if (renderFn) {
       if (routeKey === "#explorer") {
         renderFn(container, initialPath);
+      } else if (routeKey === "#storage") {
+        const targetProject = params.get("project") || "";
+        renderFn(container, { project: targetProject });
       } else {
         renderFn(container);
       }

@@ -371,3 +371,30 @@
   font-size: 0.725rem;
   color: var(--text-secondary);
 }
+
+/* Row Focus & Highlight */
+.storage-row-highlighted td {
+  background-color: var(--color-primary-light) !important;
+  color: var(--color-primary);
+  border-top: 1px solid var(--color-primary) !important;
+  border-bottom: 1px solid var(--color-primary) !important;
+  animation: pulseStorageRow 3s ease-in-out;
+}
+
+.storage-row-highlighted td .cell-title {
+  color: var(--color-primary) !important;
+  font-weight: 700;
+}
+
+@keyframes pulseStorageRow {
+  0% {
+    background-color: rgba(56, 189, 248, 0.4);
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
+  }
+  50% {
+    background-color: rgba(56, 189, 248, 0.2);
+  }
+  100% {
+    background-color: var(--color-primary-light);
+  }
+}

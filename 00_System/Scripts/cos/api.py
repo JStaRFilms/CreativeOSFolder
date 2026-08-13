@@ -203,9 +203,23 @@ def get_health() -> dict[str, Any]:
     }
 
 
+# Server in-memory caching
+_PROJECTS_CACHE: dict[str, Any] = {"data": None, "time": 0.0}
+_CACHE_TTL_SECONDS = 5.0
+
+def _invalidate_server_cache() -> None:
+    """Clear memory caches when projects are mutated."""
+    _PROJECTS_CACHE["data"] = None
+    _PROJECTS_CACHE["time"] = 0.0
+
+
 @app.get("/api/projects")
-def get_projects() -> list[dict[str, Any]]:
+def get_projects(nocache: bool = False) -> list[dict[str, Any]]:
     """List all CreativeOS projects with metadata, status, and size metrics."""
+    now = datetime.datetime.now().timestamp()
+    if not nocache and _PROJECTS_CACHE["data"] is not None and (now - _PROJECTS_CACHE["time"]) < _CACHE_TTL_SECONDS:
+        return _PROJECTS_CACHE["data"]
+
     cached_index = load_storage_index(projects_path=PROJECTS_PATH)
     cached_map: dict[str, Any] = {}
     stale_set = set()
@@ -265,7 +279,10 @@ def get_projects() -> list[dict[str, Any]]:
         project_list.append(item)
 
     project_list.sort(key=lambda p: p.get("created") or "", reverse=True)
+    _PROJECTS_CACHE["data"] = project_list
+    _PROJECTS_CACHE["time"] = now
     return project_list
+
 
 
 @app.post("/api/projects", status_code=status.HTTP_201_CREATED)
@@ -280,6 +297,7 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
             simple=req.simple,
             git=req.git,
         )
+        _invalidate_server_cache()
         return {
             "status": "success",
             "message": f"Project '{req.name}' created successfully",
@@ -353,6 +371,7 @@ def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, An
             detail=f"Failed to update metadata file: {e}",
         ) from e
 
+    _invalidate_server_cache()
     return {
         "status": "success",
         "message": f"Project '{meta.get('name', project_name)}' metadata updated successfully",
@@ -578,6 +597,7 @@ def archive_project(project_name: str) -> dict[str, Any]:
         except Exception:
             pass
 
+        _invalidate_server_cache()
         return {
             "status": "success",
             "message": f"Project '{meta.get('name', project_name)}' moved to Archive",
@@ -686,6 +706,7 @@ def resurrect_project(project_name: str) -> dict[str, Any]:
         except Exception:
             pass
 
+        _invalidate_server_cache()
         return {
             "status": "success",
             "message": f"Project '{meta.get('name', project_name)}' resurrected successfully to {final_dest}",

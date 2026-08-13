@@ -47,7 +47,7 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
     const catIconSvg = getCategoryIconSvg(cat);
 
     return `
-      <tr class="storage-row" data-slug="${p.slug || ''}" data-path="${p.path || ''}">
+      <tr class="storage-row" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}">
         <td>
           <div class="cell-project-name">
             <span class="cell-cat-icon" aria-hidden="true">${catIconSvg}</span>

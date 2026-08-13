@@ -331,11 +331,11 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
           <!-- Modal Footer Actions -->
           <div class="modal-footer">
-            <button class="btn btn-secondary copy-cd-btn" data-copy="${cdCommand}">
+            <button class="btn btn-secondary" id="modal-copy-cd-btn">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
               Copy Terminal cd
             </button>
-            <a href="#storage" class="btn btn-primary" id="modal-view-storage-btn">
+            <a href="#storage?project=${encodeURIComponent(currentProject.slug || currentProject.name || '')}" class="btn btn-primary" id="modal-view-storage-btn">
               View in Storage Table
             </a>
           </div>
@@ -479,8 +479,26 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
       });
     });
 
-    // Copy buttons
-    modalContainer.querySelectorAll(".copy-path-btn, .copy-cd-btn").forEach(btn => {
+    // Copy Terminal CD button
+    document.getElementById("modal-copy-cd-btn")?.addEventListener("click", async () => {
+      const fullTarget = currentProject.path || "";
+      const cmd = `cd "${fullTarget}"`;
+      try {
+        await navigator.clipboard.writeText(cmd);
+        showToast("Copied terminal command: " + cmd, "info", 2000);
+      } catch (err) {
+        const temp = document.createElement("textarea");
+        temp.value = cmd;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand("copy");
+        document.body.removeChild(temp);
+        showToast("Copied terminal command: " + cmd, "info", 2000);
+      }
+    });
+
+    // Copy path buttons
+    modalContainer.querySelectorAll(".copy-path-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         const textToCopy = btn.getAttribute("data-copy");
         if (!textToCopy) return;
