@@ -10,7 +10,7 @@ from argparse import RawTextHelpFormatter
 from . import __version__
 from .console import console
 from .config import SCRIPT_DIR
-from .commands import new, clone, init, sync, export, thumbs, clean, sort_exports, travel, resurrect
+from .commands import new, clone, init, sync, export, thumbs, clean, sort_exports, travel, resurrect, storage
 from .commands import category, setup, config_cmd
 from .help_formatter import RichHelpAction, RichArgumentParser
 from .onboarding import is_first_run, run_onboarding_wizard, apply_configuration
@@ -95,6 +95,7 @@ def show_help_overview() -> None:
     maint.add_row("thumbs",       "Generate global thumbnail gallery",       "cos thumbs")
     maint.add_row("clean",        "Sort and categorise Downloads folder",    "cos clean")
     maint.add_row("sort-exports", "File Exports/_Inbox into Year/Month",      "cos sort-exports")
+    maint.add_row("storage", "Review project storage safely (read-only)", "cos storage")
 
     # ── Workflow commands ─────────────────────────────────────────────────────
     workflow = Table(title="[bold]WORKFLOW[/bold]", box=box.ROUNDED, border_style="green",
@@ -125,17 +126,35 @@ def show_help_overview() -> None:
     console.print()
     console.print(management)
 
+    console.print()
+    console.print(Panel(
+        "[bold]1.[/bold] Set up one low-priority weekly scan:  "
+        "[cyan]cos storage schedule --time 01:00[/cyan]\n"
+        "[bold]2.[/bold] After it completes, open your instant report:  "
+        "[cyan]cos storage[/cyan]\n"
+        "[bold]3.[/bold] Find the largest media or code/cache projects:  "
+        "[cyan]cos storage review --sort media[/cyan]  /  "
+        "[cyan]cos storage review --sort reclaimable[/cyan]\n\n"
+        "Storage review is read-only: it will not archive or delete any file.",
+        title="[bold]Storage Quick Start[/bold]",
+        border_style="cyan",
+        padding=(1, 2),
+    ))
+
     # ── Quick reference footer ────────────────────────────────────────────────
     console.print()
     console.print(Panel(
         "[bold]Usage:[/bold]  cos <command> [options]\n\n"
-        "[bold]Command help:[/bold]  cos <command> [bold cyan]-h[/bold cyan]\n\n"
+        "[bold]Command help:[/bold]  cos <command> [bold cyan]--help[/bold cyan]  "
+        "or  cos [bold cyan]help[/bold cyan] <command>\n\n"
         "[bold]Examples:[/bold]\n"
         '  cos new "My Film" -c Video          Create video project\n'
         '  cos new "Web App" -c Code --git     Create code project with Git\n'
         "  cos sync                            Sync notes with Obsidian\n"
         "  cos travel                          Copy project to shuttle drive\n"
-        "  cos resurrect my-old-film           Restore archived project",
+        "  cos resurrect my-old-film           Restore archived project\n"
+        "  cos storage                          Open the saved storage review\n"
+        "  cos help storage                     Show storage commands and examples",
         title="[bold]Quick Reference[/bold]",
         border_style="dim",
         padding=(1, 2),
@@ -164,6 +183,16 @@ def main() -> None:
         else:
             console.print("\n[yellow]Setup cancelled. Run 'cos setup' to configure later.[/yellow]\n")
             sys.exit(0)
+
+    # Support both conventional help forms: `cos help storage` and
+    # `cos storage help`. Convert them to argparse's normal `--help` route.
+    if len(sys.argv) == 2 and sys.argv[1] == "help":
+        show_help_overview()
+        sys.exit(0)
+    if len(sys.argv) > 2 and sys.argv[1] == "help":
+        sys.argv = [sys.argv[0], *sys.argv[2:], "--help"]
+    elif len(sys.argv) > 2 and sys.argv[-1] == "help":
+        sys.argv = [*sys.argv[:-1], "--help"]
 
     # Intercept `cos` (no args) or `cos -h` / `cos --help` BEFORE argparse
     # so we can show the full Rich overview instead of the terse argparse output.
@@ -204,6 +233,7 @@ def main() -> None:
     sort_exports.add_parser(subparsers)
     travel.add_parser(subparsers)
     resurrect.add_parser(subparsers)
+    storage.add_parser(subparsers)
     # New commands for category management and configuration
     category.add_parser(subparsers)
     setup.add_parser(subparsers)
@@ -223,11 +253,17 @@ def main() -> None:
     elif args.command == "sort-exports":  sort_exports.cmd_sort_exports(args)
     elif args.command == "travel":        travel.cmd_travel(args)
     elif args.command == "resurrect":     resurrect.cmd_resurrect(args)
+    elif args.command == "storage":       storage.cmd_storage(args)
     elif args.command == "category":      category.cmd_category(args)
     elif args.command == "setup":         setup.cmd_setup(args)
     elif args.command == "config":        config_cmd.cmd_config(args)
     else:
         show_help_overview()
+        return
+
+    # This only reads the cached storage index. It never triggers disk traversal.
+    if args.command != "storage":
+        storage.show_reminder_if_due()
 
 
 if __name__ == "__main__":

@@ -86,5 +86,6 @@ coverage.xml
 # --- CreativeOS Specific ---
 *.pyc
 00_System/Config/sync_state.json
+00_System/Config/storage_index.json
 00_System/Config/error.log
 00_System/Config/creativeos.log

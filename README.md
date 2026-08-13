@@ -140,6 +140,7 @@ cos sync
 | `thumbs` | Generate global thumbnail gallery | `cos thumbs` |
 | `clean` | Sort and categorise Downloads folder | `cos clean` |
 | `sort-exports` | File Exports/_Inbox into Year/Month | `cos sort-exports` |
+| `storage review` | Review cached project size, activity, media, and regenerable code space | `cos storage review` |
 
 ### Workflow
 
@@ -256,6 +257,42 @@ C:\CreativeOS\01_Projects\Video\2026_Nike_Ad\04_Exports\Social_Media\Revisions\
 ---
 
 ## 🔧 Command Reference
+
+### `cos storage` — Project Storage Review
+
+CreativeOS can maintain a **read-only** local storage index at
+`00_System/Config/storage_index.json`. It reports each initialized project's
+created date, last meaningful update (ignoring generated folders such as
+`node_modules`, `.git`, and build caches), total size, media size, and space in
+regenerable folders. It never moves or deletes anything.
+
+```bash
+# Instant: show the last background scan
+cos storage
+
+# Get the same examples and flags shown in the terminal
+cos help storage
+cos storage review --help
+
+# Deliberately scan now and update the local index
+cos storage review --refresh
+
+# Sort the review by code/cache savings or media usage
+cos storage review --sort reclaimable
+cos storage review --sort media
+
+# Schedule a low-priority Sunday scan and opt into occasional cache-only reminders
+cos storage schedule --time 03:00
+
+# Inspect or remove the Windows Task Scheduler entry
+cos storage schedule --status
+cos storage schedule --remove
+```
+
+The scheduled task runs `cos storage scan --quiet --background`; it measures
+files at low priority and can never archive or delete project data. Normal
+CreativeOS commands only read the small cached JSON file, so they never trigger
+a disk scan.
 
 ### `cos new` — Create Project
 
