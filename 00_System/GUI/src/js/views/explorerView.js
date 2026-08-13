@@ -12,10 +12,10 @@ export async function renderExplorer(container, initialPath = "") {
       <div>
         <div class="page-eyebrow">
           <span class="studio-status-indicator" style="background-color: var(--text-primary);"></span>
-          <span>WORKSPACE FILE EXPLORER</span>
+          <span>FILE EXPLORER</span>
         </div>
         <h1 class="page-title">Workspace Explorer</h1>
-        <p class="page-description">Browse project files, inspect directory trees, and launch assets natively in your default OS apps</p>
+        <p class="page-description">Browse project directories, preview assets, and launch in OS apps</p>
       </div>
 
       <div class="header-action-group">
@@ -46,16 +46,16 @@ export async function renderExplorer(container, initialPath = "") {
     </div>
 
     <!-- Explorer Toolbar -->
-    <div class="studio-toolbar" style="margin-top: 1rem;">
+    <div class="studio-toolbar" style="margin-top: 0.85rem;">
       <div class="search-box">
         <span class="search-icon">${icons.search}</span>
-        <input type="text" id="explorer-search-input" class="search-input" placeholder="Filter files and folders in this folder..." />
+        <input type="text" id="explorer-search-input" class="search-input" placeholder="Filter files in current folder..." />
       </div>
 
       <div class="toolbar-controls">
-        <button id="explorer-parent-btn" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;" disabled>
+        <button id="explorer-parent-btn" class="btn btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.785rem;" disabled>
           ${icons.arrowUp}
-          Up One Level
+          Up
         </button>
 
         <div class="view-mode-toggle">
@@ -70,10 +70,10 @@ export async function renderExplorer(container, initialPath = "") {
     </div>
 
     <!-- Explorer Content Area -->
-    <div id="explorer-content-area" class="explorer-content-container">
+    <div id="explorer-content-area" class="explorer-content-container" style="min-height: 260px;">
       <div class="loading-state">
         <div class="spinner"></div>
-        <p>Reading directory contents...</p>
+        <p>Scanning directory...</p>
       </div>
     </div>
   `;

@@ -31,6 +31,9 @@ REGENERABLE_DIRS = {
     "target",
     "out",
     "test-results",
+    ".venv",
+    "venv",
+    "env",
 }
 
 MEDIA_EXTENSIONS = {
@@ -103,6 +106,9 @@ def _created_date(project: Path, metadata: dict[str, Any]) -> tuple[str, str]:
     return _iso(timestamp)[:10], "filesystem"
 
 
+VCS_DIRS = {".git", ".svn", ".hg"}
+
+
 def _contains_any(parts: Iterable[str], names: set[str]) -> bool:
     return any(part in names for part in parts)
 
@@ -120,39 +126,56 @@ def inspect_project(
     meaningful_latest: float | None = None
     unreadable_files = 0
 
-    for root, dirs, files in os.walk(project, topdown=True, followlinks=False):
-        root_path = Path(root)
+    stack: list[tuple[Path, bool, bool]] = [(project, False, False)]
+
+    while stack:
+        current_dir, in_reclaimable, in_excluded = stack.pop()
         try:
-            relative_parts = root_path.relative_to(project).parts
-        except ValueError:
-            relative_parts = ()
+            with os.scandir(current_dir) as it:
+                for entry in it:
+                    try:
+                        if entry.is_symlink():
+                            continue
 
-        # Never traverse a symlink or NTFS junction: they may point outside
-        # the project and cause massive over-counting (pnpm junctions, etc.).
-        dirs[:] = [name for name in dirs if not _is_link_or_junction(root_path / name)]
+                        name = entry.name
+                        if entry.is_dir(follow_symlinks=False):
+                            if name in VCS_DIRS:
+                                continue
+                            try:
+                                if Path(entry.path).is_junction():
+                                    continue
+                            except Exception:
+                                pass
 
-        for filename in files:
-            file_path = root_path / filename
-            if file_path.is_symlink():
-                continue
-            stat_result = _safe_stat(file_path)
-            if stat_result is None:
-                unreadable_files += 1
-                continue
+                            child_reclaimable = in_reclaimable or (name in REGENERABLE_DIRS)
+                            child_excluded = in_excluded or (name in EXCLUDED_DIRS)
+                            stack.append((Path(entry.path), child_reclaimable, child_excluded))
 
-            size = stat_result.st_size
-            file_count += 1
-            total_size += size
-            path_parts = relative_parts + (filename,)
-            is_reclaimable = _contains_any(path_parts, REGENERABLE_DIRS)
-            is_excluded_from_activity = _contains_any(path_parts, EXCLUDED_DIRS)
+                        elif entry.is_file(follow_symlinks=False):
+                            stat_res = entry.stat(follow_symlinks=False)
+                            size = stat_res.st_size
+                            mtime = stat_res.st_mtime
 
-            if is_reclaimable:
-                reclaimable_size += size
-            if file_path.suffix.lower() in MEDIA_EXTENSIONS:
-                media_size += size
-            if not is_excluded_from_activity:
-                meaningful_latest = max(meaningful_latest or stat_result.st_mtime, stat_result.st_mtime)
+                            file_count += 1
+                            total_size += size
+
+                            if in_reclaimable:
+                                reclaimable_size += size
+                            else:
+                                _, ext = os.path.splitext(name)
+                                if ext.lower() in MEDIA_EXTENSIONS:
+                                    media_size += size
+
+                            if not in_excluded and not in_reclaimable:
+                                if meaningful_latest is None or mtime > meaningful_latest:
+                                    meaningful_latest = mtime
+
+                    except (OSError, PermissionError):
+                        unreadable_files += 1
+                        continue
+        except (OSError, PermissionError):
+            unreadable_files += 1
+            continue
 
     project_stat = _safe_stat(project)
     if meaningful_latest is None and project_stat is not None:

@@ -18,15 +18,15 @@ export async function renderStorage(container, options = {}) {
       <div>
         <div class="page-eyebrow">
           <span class="studio-status-indicator" style="background-color: var(--color-accent-cyan);"></span>
-          <span>STORAGE AUDIT &amp; ANALYTICS</span>
+          <span>STORAGE ANALYTICS</span>
         </div>
         <h1 class="page-title">Storage Inventory</h1>
-        <p class="page-description">Safely inspect disk consumption, media footprints, and reclaimable build caches</p>
+        <p class="page-description">Inspect disk consumption, media assets, and cache directories</p>
       </div>
       <div class="header-action-group">
         <button id="rescan-storage-btn" class="btn btn-secondary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Rescan Index
+          Rescan
         </button>
       </div>
     </div>
@@ -39,7 +39,7 @@ export async function renderStorage(container, options = {}) {
         <span class="search-icon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </span>
-        <input type="text" id="storage-search-input" class="search-input" placeholder="Search by project name, category, or path..." />
+        <input type="text" id="storage-search-input" class="search-input" placeholder="Search projects by name, category, or path..." />
       </div>
     </div>
 
@@ -47,7 +47,7 @@ export async function renderStorage(container, options = {}) {
       ${hasCache ? '' : `
         <div class="loading-state">
           <div class="spinner"></div>
-          <p>Loading storage inventory metrics...</p>
+          <p>Scanning storage footprint...</p>
         </div>
       `}
     </div>
@@ -76,54 +76,54 @@ export async function renderStorage(container, options = {}) {
       .slice(0, 3);
 
     summaryContainer.innerHTML = `
-      <!-- Visual Breakdown Card -->
-      <div class="storage-visual-card">
+      <!-- Flattened Storage Overview Strip -->
+      <div class="storage-overview-strip">
         <div class="storage-bar-header">
           <div>
-            <span class="storage-bar-title">Disk Allocation Breakdown</span>
+            <span class="storage-bar-title">Disk Allocation</span>
             <span class="storage-bar-sub font-mono">${formatBytes(total)} Total</span>
           </div>
           <div class="storage-legend">
-            <span class="legend-item"><span class="legend-dot" style="background-color: var(--color-accent-cyan);"></span> Media Assets (${mediaPct}%)</span>
+            <span class="legend-item"><span class="legend-dot" style="background-color: var(--color-accent-cyan);"></span> Media (${mediaPct}%)</span>
             <span class="legend-item"><span class="legend-dot" style="background-color: var(--color-warning);"></span> Reclaimable (${reclaimablePct}%)</span>
-            <span class="legend-item"><span class="legend-dot" style="background-color: var(--text-primary);"></span> Workspace &amp; Docs (${otherPct}%)</span>
+            <span class="legend-item"><span class="legend-dot" style="background-color: var(--text-primary);"></span> Workspace (${otherPct}%)</span>
           </div>
         </div>
 
         <div class="multi-segment-bar">
-          <div class="segment-media" style="width: ${mediaPct}%;" title="Media Assets: ${formatBytes(media)} (${mediaPct}%)"></div>
-          <div class="segment-reclaimable" style="width: ${reclaimablePct}%;" title="Reclaimable Cache: ${formatBytes(reclaimable)} (${reclaimablePct}%)"></div>
+          <div class="segment-media" style="width: ${mediaPct}%;" title="Media: ${formatBytes(media)} (${mediaPct}%)"></div>
+          <div class="segment-reclaimable" style="width: ${reclaimablePct}%;" title="Reclaimable: ${formatBytes(reclaimable)} (${reclaimablePct}%)"></div>
           <div class="segment-other" style="width: ${otherPct}%;" title="Workspace: ${formatBytes(other)} (${otherPct}%)"></div>
         </div>
-      </div>
 
-      <div class="storage-insights">
-        <div class="storage-insight-card">
-          <span class="insight-label">Total Footprint</span>
-          <span class="insight-val font-mono">${formatBytes(total)}</span>
-          <span class="insight-sub">${data.project_count || 0} projects indexed</span>
-        </div>
-        <div class="storage-insight-card">
-          <span class="insight-label">Media Assets</span>
-          <span class="insight-val font-mono" style="color: var(--color-accent-cyan);">${formatBytes(media)}</span>
-          <span class="insight-sub">RAW, Video, Stems &amp; Audio</span>
-        </div>
-        <div class="storage-insight-card">
-          <span class="insight-label">Reclaimable Cache</span>
-          <span class="insight-val font-mono" style="color: var(--color-warning);">${formatBytes(reclaimable)}</span>
-          <span class="insight-sub">Build outputs &amp; cache dirs</span>
-        </div>
-        <div class="storage-insight-card">
-          <span class="insight-label">Index Timestamp</span>
-          <span class="insight-val font-mono" style="font-size: 1rem; margin-top: 0.15rem;">${data.scanned_at ? data.scanned_at.substring(0, 19).replace('T', ' ') : 'Live'}</span>
-          <span class="insight-sub">${data.stale_count || 0} stale projects (&gt;90d)</span>
+        <div class="storage-insights">
+          <div class="storage-insight-cell">
+            <span class="insight-label">Footprint</span>
+            <span class="insight-val font-mono">${formatBytes(total)}</span>
+            <span class="insight-sub">${data.project_count || 0} projects</span>
+          </div>
+          <div class="storage-insight-cell">
+            <span class="insight-label">Media Assets</span>
+            <span class="insight-val font-mono" style="color: var(--color-accent-cyan);">${formatBytes(media)}</span>
+            <span class="insight-sub">RAW &amp; Audio</span>
+          </div>
+          <div class="storage-insight-cell">
+            <span class="insight-label">Reclaimable</span>
+            <span class="insight-val font-mono" style="color: var(--color-warning);">${formatBytes(reclaimable)}</span>
+            <span class="insight-sub">Caches</span>
+          </div>
+          <div class="storage-insight-cell">
+            <span class="insight-label">Last Indexed</span>
+            <span class="insight-val font-mono" style="font-size: 0.95rem; margin-top: 0.15rem;">${data.scanned_at ? data.scanned_at.substring(0, 10) : 'Live'}</span>
+            <span class="insight-sub">${data.stale_count || 0} stale (&gt;90d)</span>
+          </div>
         </div>
       </div>
 
       <!-- Top Consumers Spotlight -->
       ${topProjects.length > 0 ? `
         <div class="top-consumers-panel">
-          <span class="top-consumers-title">Top Storage Consumers</span>
+          <span class="top-consumers-title">Top Space Consumers</span>
           <div class="top-consumers-grid">
             ${topProjects.map((p, idx) => `
               <div class="top-consumer-card" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" tabindex="0" role="button" aria-label="Inspect ${p.name}">

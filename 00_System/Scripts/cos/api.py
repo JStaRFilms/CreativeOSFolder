@@ -192,7 +192,7 @@ class UpdateProjectRequest(BaseModel):
 
 
 class OpenPathRequest(BaseModel):
-    path: str = Field(..., min_length=1, description="Path to open with native OS handler")
+    path: Optional[str] = Field(default="", description="Path or project name to open with native OS handler")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -348,6 +348,18 @@ def _compute_new_project_path(current_proj_path: Path, new_name: str, new_client
     slugified_name = clean_name.replace(" ", "_")
     new_dir_name = f"{date_prefix}{slugified_name}" if date_prefix else slugified_name
 
+    # Extract any intermediate subfolders relative to the old client/category parent
+    intermediate_parts: list[str] = []
+    try:
+        rel_parts = list(current_proj_path.relative_to(Path(PROJECTS_PATH)).parts)
+        if len(rel_parts) > 1 and rel_parts[0] == "Clients":
+            if len(rel_parts) > 3:
+                intermediate_parts = list(rel_parts[2:-1])
+        elif len(rel_parts) > 2:
+            intermediate_parts = list(rel_parts[1:-1])
+    except Exception:
+        intermediate_parts = []
+
     if new_client and new_client.lower() != "none" and new_client.lower() != "internal":
         clean_client = validate_client_name(new_client.strip())
         target_parent = Path(PROJECTS_PATH) / "Clients" / clean_client
@@ -355,11 +367,14 @@ def _compute_new_project_path(current_proj_path: Path, new_name: str, new_client
         clean_cat = new_category.strip() or "Video"
         target_parent = Path(PROJECTS_PATH) / clean_cat
 
+    if intermediate_parts:
+        target_parent = target_parent.joinpath(*intermediate_parts)
+
     target_path = target_parent / new_dir_name
     return target_path, slugified_name
 
 
-@app.put("/api/projects/{project_name}")
+@app.put("/api/projects/{project_name:path}")
 def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, Any]:
     """Update project metadata (.project_meta.json) and optionally sync filesystem on disk."""
     proj_path, meta = _find_project_dir(project_name)
@@ -422,11 +437,15 @@ def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, An
                 meta["slug"] = new_slug
                 moved_disk = True
 
-                # Clean up empty parent client folder if left behind
+                # Clean up empty parent hierarchy left behind
                 try:
-                    if old_parent != Path(PROJECTS_PATH) and old_parent.exists():
-                        if not any(old_parent.iterdir()):
-                            old_parent.rmdir()
+                    curr_p = old_parent
+                    while curr_p != Path(PROJECTS_PATH) and curr_p != (Path(PROJECTS_PATH) / "Clients") and curr_p.exists():
+                        if not any(curr_p.iterdir()):
+                            curr_p.rmdir()
+                            curr_p = curr_p.parent
+                        else:
+                            break
                 except Exception:
                     pass
             except Exception as e:
@@ -479,18 +498,32 @@ def list_fs(path: Optional[str] = None) -> dict[str, Any]:
         p_str = path.strip()
         p = Path(p_str)
         if not p.is_absolute():
-            candidate = (Path(PROJECTS_PATH) / p).resolve()
-            if candidate.exists():
-                target_dir = candidate
+            cand_proj = (Path(PROJECTS_PATH) / p).resolve()
+            cand_root = (Path(ROOT_PATH) / p).resolve()
+            if cand_root.exists() and not cand_proj.exists() and not str(p).startswith("Clients") and str(p) not in ("Video", "Code", "Photo", "Design", "AI", "Audio", "Course", "Writing", "Music", "3D"):
+                target_dir = cand_root
             else:
-                target_dir = (Path(ROOT_PATH) / p).resolve()
+                target_dir = cand_proj
         else:
             target_dir = p.resolve()
 
     target_dir = _check_path_allowed(target_dir)
 
     if not target_dir.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Path not found: {path}")
+        try:
+            rel = target_dir.relative_to(Path(PROJECTS_PATH)).as_posix()
+            return {
+                "current_path": str(target_dir),
+                "relative_path": rel,
+                "parent_path": str(target_dir.parent) if target_dir != Path(PROJECTS_PATH) else None,
+                "is_root": False,
+                "entries": [],
+                "count": 0,
+                "exists": False,
+            }
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Path not found: {path}")
+
     if not target_dir.is_dir():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Path is not a directory: {path}")
 
@@ -555,33 +588,56 @@ def list_fs(path: Optional[str] = None) -> dict[str, Any]:
 @app.post("/api/fs/open")
 def open_fs_path(req: OpenPathRequest) -> dict[str, Any]:
     """Open a file or directory using the OS native handler."""
-    p_str = req.path.strip()
-    p = Path(p_str)
-    if not p.is_absolute():
-        candidate = (Path(PROJECTS_PATH) / p).resolve()
-        if candidate.exists():
-            target = candidate
-        else:
-            target = (Path(ROOT_PATH) / p).resolve()
+    p_str = (req.path or "").strip()
+    if not p_str:
+        target = Path(PROJECTS_PATH).resolve()
     else:
-        target = p.resolve()
+        p = Path(p_str)
+        if p.is_absolute():
+            target = p.resolve()
+        else:
+            # 1. Try relative to PROJECTS_PATH
+            candidate1 = (Path(PROJECTS_PATH) / p).resolve()
+            # 2. Try relative to ROOT_PATH
+            candidate2 = (Path(ROOT_PATH) / p).resolve()
+            if candidate1.exists():
+                target = candidate1
+            elif candidate2.exists():
+                target = candidate2
+            else:
+                # 3. Try project name/slug lookup
+                try:
+                    proj_dir, _ = _find_project_dir(p_str)
+                    target = proj_dir.resolve()
+                except Exception:
+                    target = candidate1
 
     target = _check_path_allowed(target)
 
     if not target.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Path does not exist: {req.path}")
 
+    norm_target = os.path.normpath(str(target))
+
     try:
         if sys.platform == "win32":
-            os.startfile(str(target))
+            try:
+                os.startfile(norm_target)
+            except Exception as win_err:
+                logger.warning(f"os.startfile fallback for {norm_target}: {win_err}")
+                if target.is_dir():
+                    subprocess.Popen(["explorer", norm_target])
+                else:
+                    subprocess.Popen(["explorer", f"/select,{norm_target}"])
         elif sys.platform == "darwin":
-            subprocess.run(["open", str(target)], check=False)
+            subprocess.Popen(["open", norm_target])
         else:
-            subprocess.run(["xdg-open", str(target)], check=False)
+            subprocess.Popen(["xdg-open", norm_target])
+
         return {
             "status": "success",
             "message": f"Opened '{target.name}' natively",
-            "path": str(target),
+            "path": norm_target,
         }
     except Exception as e:
         logger.error(f"Failed to open native handler for {target}: {e}")
@@ -595,7 +651,44 @@ def open_fs_path(req: OpenPathRequest) -> dict[str, Any]:
 # Travel, Archive & Resurrect Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.post("/api/projects/{project_name}/travel")
+@app.get("/api/projects/archived")
+def get_archived_projects() -> list[dict[str, Any]]:
+    """List all archived projects located in ARCHIVE_PATH."""
+    archive_root = ARCHIVE_PATH
+    if not archive_root or not os.path.exists(archive_root):
+        return []
+
+    discovered = discover_projects(archive_root)
+    archived_list: list[dict[str, Any]] = []
+
+    for proj_path, metadata in discovered:
+        path_str = str(proj_path)
+        cat = metadata.get("type") or "Video"
+        try:
+            rel_path = proj_path.relative_to(Path(archive_root)).as_posix()
+        except Exception:
+            rel_path = proj_path.name
+
+        created, created_source = _created_date(proj_path, metadata)
+        archived_list.append({
+            "name": metadata.get("name") or proj_path.name,
+            "slug": metadata.get("slug") or proj_path.name,
+            "type": cat,
+            "client": metadata.get("client") or "None",
+            "description": metadata.get("description") or "",
+            "path": path_str,
+            "relative_path": rel_path,
+            "created": created,
+            "created_source": created_source,
+            "icon": get_category_icon(cat),
+            "is_archived": True,
+        })
+
+    archived_list.sort(key=lambda p: p.get("created") or "", reverse=True)
+    return archived_list
+
+
+@app.post("/api/projects/{project_name:path}/travel")
 def travel_project(project_name: str) -> dict[str, Any]:
     """Copy active project to configured Shuttle Drive."""
     proj_path, meta = _find_project_dir(project_name)
@@ -640,7 +733,7 @@ def travel_project(project_name: str) -> dict[str, Any]:
         ) from e
 
 
-@app.post("/api/projects/{project_name}/archive")
+@app.post("/api/projects/{project_name:path}/archive")
 def archive_project(project_name: str) -> dict[str, Any]:
     """Move active project from Projects tree to Cold Archive."""
     proj_path, meta = _find_project_dir(project_name)
@@ -699,44 +792,7 @@ def archive_project(project_name: str) -> dict[str, Any]:
         ) from e
 
 
-@app.get("/api/projects/archived")
-def get_archived_projects() -> list[dict[str, Any]]:
-    """List all archived projects located in ARCHIVE_PATH."""
-    archive_root = ARCHIVE_PATH
-    if not archive_root or not os.path.exists(archive_root):
-        return []
-
-    discovered = discover_projects(archive_root)
-    archived_list: list[dict[str, Any]] = []
-
-    for proj_path, metadata in discovered:
-        path_str = str(proj_path)
-        cat = metadata.get("type") or "Video"
-        try:
-            rel_path = proj_path.relative_to(Path(archive_root)).as_posix()
-        except Exception:
-            rel_path = proj_path.name
-
-        created, created_source = _created_date(proj_path, metadata)
-        archived_list.append({
-            "name": metadata.get("name") or proj_path.name,
-            "slug": metadata.get("slug") or proj_path.name,
-            "type": cat,
-            "client": metadata.get("client") or "None",
-            "description": metadata.get("description") or "",
-            "path": path_str,
-            "relative_path": rel_path,
-            "created": created,
-            "created_source": created_source,
-            "icon": get_category_icon(cat),
-            "is_archived": True,
-        })
-
-    archived_list.sort(key=lambda p: p.get("created") or "", reverse=True)
-    return archived_list
-
-
-@app.post("/api/projects/{project_name}/resurrect")
+@app.post("/api/projects/{project_name:path}/resurrect")
 def resurrect_project(project_name: str) -> dict[str, Any]:
     """Restore an archived project from Archive back to active Projects tree."""
     archive_root = ARCHIVE_PATH

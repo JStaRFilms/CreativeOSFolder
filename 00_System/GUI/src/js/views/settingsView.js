@@ -19,68 +19,68 @@ export async function renderSettings(container) {
       <div>
         <div class="page-eyebrow">
           <span class="studio-status-indicator" style="background-color: var(--text-primary);"></span>
-          <span>SYSTEM RUNTIME &amp; INTEGRATION</span>
+          <span>CONFIGURATION</span>
         </div>
-        <h1 class="page-title">System &amp; Vault Sync</h1>
-        <p class="page-description">Inspect active system paths, category blueprints, and synchronize notes with Obsidian</p>
+        <h1 class="page-title">Settings &amp; Sync</h1>
+        <p class="page-description">System storage paths, category blueprints, and Obsidian Vault sync</p>
       </div>
     </div>
 
     <!-- Obsidian Sync Section -->
     <div class="settings-section">
-      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
         <div>
-          <h2 class="section-title">Obsidian Brain Sync</h2>
-          <p class="section-desc">Bidirectional synchronization between project notes (<code>00_Notes/</code>) and your Obsidian Vault</p>
+          <h2 class="section-title">Obsidian Sync</h2>
+          <p class="section-desc">Bidirectional notes sync between project <code>00_Notes/</code> and your Obsidian Vault</p>
         </div>
         <button id="trigger-sync-btn" class="btn btn-primary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Sync With Vault
+          Sync Vault
         </button>
       </div>
 
       <div id="sync-console" class="log-console" style="display: none;">
         <div class="console-top-bar">
-          <span class="console-title font-mono">Obsidian Vault Sync Stream</span>
+          <span class="console-title font-mono">Sync Stream</span>
           <span id="sync-time-stamp" class="console-time font-mono">Ready</span>
         </div>
-        <div id="sync-log-entries" class="console-body font-mono"></div>
+        <div id="sync-log-entries" class="console-body font-mono" style="font-size: 0.75rem;"></div>
       </div>
     </div>
 
     <!-- System Paths -->
     <div class="settings-section">
-      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
         <div>
-          <h2 class="section-title">System Paths</h2>
-          <p class="section-desc">Configured workspace storage locations loaded from <code>00_System/Config/config.json</code></p>
+          <h2 class="section-title">Storage Paths</h2>
+          <p class="section-desc">Active workspace drive locations from <code>00_System/Config/config.json</code></p>
         </div>
-        <button id="toggle-edit-paths-btn" class="btn btn-secondary" style="font-size: 0.8rem;">
+        <button id="toggle-edit-paths-btn" class="btn btn-secondary" style="font-size: 0.785rem;">
           ${icons.edit}
           <span id="edit-paths-btn-text">Edit Paths</span>
         </button>
       </div>
       <div id="paths-list-container">
         ${hasCache ? '' : `
-          <div class="loading-state" style="padding: 2rem;">
+          <div class="loading-state" style="padding: 1.5rem;">
             <div class="spinner"></div>
-            <p>Loading configuration...</p>
+            <p>Loading storage paths...</p>
           </div>
         `}
       </div>
     </div>
 
-    <!-- Category Configurations -->
-    <div class="settings-section">
-      <div class="section-header">
+    <!-- Category Blueprints Section (Clean Direct Surface) -->
+    <div style="margin-top: 1.75rem; margin-bottom: 1.5rem;">
+      <div class="section-header" style="margin-bottom: 0.85rem;">
         <h2 class="section-title">Category Blueprints</h2>
-        <p class="section-desc">Real project scaffolding templates and seeded files loaded from <code>00_System/Config/categories.json</code></p>
+        <p class="section-desc">Project scaffolding templates and structure rules from <code>00_System/Config/categories.json</code></p>
       </div>
       <div id="categories-table-container">
         ${hasCache ? '' : `
-          <div class="loading-state" style="padding: 2rem;">
+          <div class="loading-state" style="padding: 1.5rem;">
             <div class="spinner"></div>
-            <p>Loading category blueprints...</p>
+            <p>Loading blueprints...</p>
           </div>
         `}
       </div>
@@ -212,58 +212,137 @@ export async function renderSettings(container) {
     renderPaths(currentConfigData);
   });
 
+  let selectedCategoryKey = "Video";
+
   function renderCategories(catData) {
     const categoriesContainer = document.getElementById("categories-table-container");
     if (!categoriesContainer) return;
     const categories = catData?.categories || {};
+    const categoryKeys = Object.keys(categories);
+    if (categoryKeys.length === 0) return;
+
+    if (!categories[selectedCategoryKey]) {
+      selectedCategoryKey = categoryKeys[0];
+    }
+
+    const currentCat = categories[selectedCategoryKey] || {};
+    const tStruct = currentCat.template_structure || {};
+    const folders = Object.keys(tStruct).length > 0 ? Object.keys(tStruct) : (currentCat.folder_structure || []);
+    const catIconSvg = getCategoryIconSvg(selectedCategoryKey);
+    const totalFiles = Object.values(tStruct).reduce((acc, list) => acc + (Array.isArray(list) ? list.length : 0), 0);
+
     categoriesContainer.innerHTML = `
-      <div class="category-cards-grid">
-        ${Object.entries(categories).map(([name, cat]) => {
-          const tStruct = cat.template_structure || {};
-          const folders = Object.keys(tStruct).length > 0 ? Object.keys(tStruct) : (cat.folder_structure || []);
-          const catIconSvg = getCategoryIconSvg(name);
-          return `
-            <div class="category-blueprint-card">
-              <div class="blueprint-header">
-                <div class="blueprint-title-group">
-                  <span class="blueprint-icon">
-                    ${catIconSvg}
-                  </span>
-                  <div>
-                    <h4 class="blueprint-name">${name}</h4>
-                    <span class="blueprint-folder font-mono">01_Projects/${cat.physical_folder || name}/</span>
+      <div class="blueprint-inspector-container">
+        <!-- Left Column: Category Navigation List -->
+        <div class="blueprint-nav-column">
+          <div class="blueprint-nav-header">
+            <span class="blueprint-nav-heading">Categories</span>
+            <span class="blueprint-count-pill font-mono">${categoryKeys.length}</span>
+          </div>
+          <div class="blueprint-nav-list">
+            ${categoryKeys.map(key => {
+              const cat = categories[key] || {};
+              const isSelected = key === selectedCategoryKey;
+              const icon = getCategoryIconSvg(key);
+              const struct = cat.template_structure || {};
+              const fCount = Object.keys(struct).length || (cat.folder_structure || []).length || 0;
+              return `
+                <button type="button" class="blueprint-nav-item ${isSelected ? 'is-selected' : ''}" data-cat-key="${key}">
+                  <div class="blueprint-nav-item-left">
+                    <span class="blueprint-nav-icon">${icon}</span>
+                    <span class="blueprint-nav-name">${key}</span>
                   </div>
-                </div>
-                <span class="status-indicator-tag ${cat.enabled !== false ? 'is-active' : 'is-stale'}">
-                  <span class="status-dot"></span>
-                  <span>${cat.enabled !== false ? 'Enabled' : 'Disabled'}</span>
-                </span>
+                  <span class="blueprint-nav-badge font-mono">${fCount} dirs</span>
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </div>
+
+        <!-- Right Column: Detail Blueprint Panel -->
+        <div class="blueprint-detail-panel">
+          <!-- Detail Header -->
+          <div class="blueprint-detail-header">
+            <div class="blueprint-detail-identity">
+              <div class="blueprint-detail-icon-box">
+                ${catIconSvg}
               </div>
-              
-              <p class="blueprint-desc">${cat.description || 'Standard project scaffold'}</p>
-              
-              <div class="blueprint-folders-list">
-                ${folders.map(f => {
-                  const files = tStruct[f] || [];
-                  return `
-                    <div style="display: flex; flex-direction: column; gap: 0.15rem; margin-bottom: 0.35rem;">
-                      <span class="blueprint-folder-chip font-mono ${f === '00_Notes' ? 'chip-notes' : ''}">
-                        ${f}/
-                      </span>
-                      ${files.length > 0 ? `
-                        <span style="font-size: 0.675rem; color: var(--text-muted); padding-left: 0.35rem;" class="font-mono">
-                          ↳ ${files.join(", ")}
-                        </span>
-                      ` : ''}
-                    </div>
-                  `;
-                }).join("")}
+              <div>
+                <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+                  <h3 class="blueprint-detail-title">${selectedCategoryKey}</h3>
+                  <span class="status-indicator-tag is-active">
+                    <span class="status-dot"></span>
+                    <span>${currentCat.enabled !== false ? 'Active Blueprint' : 'Disabled'}</span>
+                  </span>
+                </div>
+                <p class="blueprint-detail-desc">${currentCat.description || 'Standard project scaffold and template structure'}</p>
               </div>
             </div>
-          `;
-        }).join("")}
+          </div>
+
+          <!-- Quick Metrics Strip -->
+          <div class="blueprint-metrics-strip">
+            <div class="blueprint-metric-item">
+              <span class="insight-label">Target Directory</span>
+              <span class="insight-val font-mono" style="font-size: 0.85rem; color: var(--text-primary);">01_Projects/${currentCat.physical_folder || selectedCategoryKey}/</span>
+            </div>
+            <div class="blueprint-metric-item">
+              <span class="insight-label">Blueprint Subfolders</span>
+              <span class="insight-val font-mono" style="font-size: 0.95rem; color: var(--color-primary);">${folders.length} subfolders</span>
+            </div>
+            <div class="blueprint-metric-item">
+              <span class="insight-label">Seeded Template Files</span>
+              <span class="insight-val font-mono" style="font-size: 0.95rem; color: var(--color-accent-cyan);">${totalFiles} templates</span>
+            </div>
+          </div>
+
+          <!-- Structured Folder & Seed Files Breakdown -->
+          <div class="blueprint-structure-section">
+            <div class="blueprint-section-subheading">Scaffold Directory Blueprint</div>
+            <div class="blueprint-folder-breakdown-list">
+              ${folders.map(f => {
+                const files = tStruct[f] || [];
+                const isNotes = f === '00_Notes';
+                return `
+                  <div class="blueprint-folder-card ${isNotes ? 'is-notes-folder' : ''}">
+                    <div class="blueprint-folder-card-header">
+                      <div class="blueprint-folder-card-name">
+                        <span class="folder-icon">${icons.folder}</span>
+                        <strong class="font-mono">${f}/</strong>
+                      </div>
+                      ${isNotes ? '<span class="status-indicator-tag is-active" style="font-size: 0.65rem;">Obsidian Sync</span>' : ''}
+                      ${files.length > 0 && !isNotes ? `<span class="folder-seed-count font-mono">${files.length} ${files.length === 1 ? 'file' : 'files'}</span>` : ''}
+                    </div>
+                    ${files.length > 0 ? `
+                      <div class="blueprint-seed-files-wrap">
+                        ${files.map(file => `
+                          <span class="seed-file-chip font-mono">
+                            <span class="seed-file-icon">${icons.file}</span>
+                            <span>${file}</span>
+                          </span>
+                        `).join("")}
+                      </div>
+                    ` : `
+                      <div class="blueprint-empty-folder-hint font-mono">Root subfolder</div>
+                    `}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        </div>
       </div>
     `;
+
+    categoriesContainer.querySelectorAll(".blueprint-nav-item").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-cat-key");
+        if (key && key !== selectedCategoryKey) {
+          selectedCategoryKey = key;
+          renderCategories(catData);
+        }
+      });
+    });
   }
 
   async function loadSettingsData() {

@@ -16,6 +16,14 @@ export function closeActiveModal() {
   }
 }
 
+function lockBodyScroll() {
+  document.body.style.overflow = "hidden";
+}
+
+function unlockBodyScroll() {
+  document.body.style.overflow = "";
+}
+
 /**
  * Generic Confirmation / Warning Modal
  */
@@ -37,15 +45,15 @@ export function openConfirmModal({
   modalContainer.innerHTML = `
     <div class="modal-backdrop" id="confirm-modal-backdrop">
       <div class="modal-dialog modal-dialog-sm" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-        <div class="modal-header" style="border-bottom-color: ${accentColor}22;">
+        <div class="modal-header">
           <div class="modal-title-group">
-            <div class="modal-category-icon" style="color: ${accentColor}; background: ${accentColor}18;">
+            <div class="modal-category-icon" style="color: ${accentColor};">
               ${isDanger ? icons.error : icons.warning}
             </div>
             <div>
               <div class="modal-eyebrow">
-                <span class="status-pill" style="color: ${accentColor}; background: ${accentColor}18; border-color: ${accentColor}33;">
-                  ${variant.toUpperCase()} REQUIRED
+                <span class="status-pill" style="color: ${accentColor}; background: ${accentColor}18;">
+                  ${variant.toUpperCase()}
                 </span>
               </div>
               <h2 id="confirm-title" class="modal-title">${title}</h2>
@@ -57,13 +65,13 @@ export function openConfirmModal({
         </div>
 
         <div class="modal-body">
-          <div class="confirm-message-box" style="border-left: 3px solid ${accentColor}; padding: 0.75rem 1rem; background: var(--surface-bg-card); border-radius: 4px;">
-            <p style="color: var(--text-primary); font-size: 0.9rem; margin-bottom: ${subtext ? '0.5rem' : '0'}; line-height: 1.5;">${message}</p>
-            ${subtext ? `<p class="font-mono" style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">${subtext}</p>` : ''}
+          <div style="padding: 0.5rem 0;">
+            <p style="color: var(--text-primary); font-size: 0.875rem; margin-bottom: ${subtext ? '0.35rem' : '0'}; line-height: 1.45;">${message}</p>
+            ${subtext ? `<p class="font-mono" style="color: var(--text-muted); font-size: 0.775rem; margin: 0;">${subtext}</p>` : ''}
           </div>
         </div>
 
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.65rem;">
           <button class="btn btn-secondary" id="confirm-cancel-btn">${cancelText}</button>
           <button class="btn ${isDanger ? 'btn-danger' : 'btn-primary'}" id="confirm-proceed-btn">
             ${confirmText}
@@ -74,11 +82,11 @@ export function openConfirmModal({
   `;
 
   modalContainer.style.display = "block";
-  document.body.style.overflow = "hidden";
+  lockBodyScroll();
 
   function closeModal() {
     modalContainer.style.display = "none";
-    document.body.style.overflow = "";
+    unlockBodyScroll();
     modalContainer.innerHTML = "";
     activeModalCloser = null;
   }
@@ -129,7 +137,6 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
     const fullPath = currentProject.path || "";
     const relPath = currentProject.relative_path || currentProject.slug || "";
-    const cdCommand = `cd "${fullPath}"`;
     const catIconSvg = getCategoryIconSvg(cat);
 
     modalContainer.innerHTML = `
@@ -143,18 +150,18 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
               </div>
               <div>
                 <div class="modal-eyebrow">
-                  <span class="category-pill-tag">${cat} Workspace</span>
+                  <span class="category-pill-tag">${cat}</span>
                   <span class="status-pill ${isStale ? 'status-stale' : 'status-active'}">
-                    ${isStale ? 'Stale (>90d)' : 'Active'}
+                    ${isStale ? 'Stale' : 'Active'}
                   </span>
                 </div>
                 <h2 id="modal-title" class="modal-title" title="${currentProject.name}">${currentProject.name}</h2>
               </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <button class="btn btn-secondary" id="modal-toggle-edit-btn" style="padding: 0.35rem 0.65rem; font-size: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.45rem;">
+              <button class="btn btn-secondary" id="modal-toggle-edit-btn" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
                 ${isEditMode ? icons.x : icons.edit}
-                <span>${isEditMode ? 'Cancel Edit' : 'Edit Metadata'}</span>
+                <span>${isEditMode ? 'Cancel' : 'Edit'}</span>
               </button>
               <button class="modal-close-btn" id="modal-close-btn" aria-label="Close modal">
                 ${icons.x}
@@ -166,22 +173,21 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
           <div class="modal-body">
             ${isEditMode ? `
               <!-- Editable Metadata Form -->
-              <div class="modal-section" style="background: var(--surface-bg-card); padding: 1.25rem; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 1.25rem;">
-                <h4 class="modal-section-heading" style="margin-bottom: 1rem; color: var(--color-accent-cyan);">Edit Project Metadata</h4>
+              <div class="modal-section">
                 <form id="edit-metadata-form" class="studio-form">
-                  <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                     <div class="form-group">
                       <label class="form-label" for="edit-project-name">Project Title *</label>
                       <input type="text" id="edit-project-name" class="form-input font-mono" value="${currentProject.name || ''}" required />
                     </div>
 
                     <div class="form-group">
-                      <label class="form-label" for="edit-project-client">Client / Entity</label>
+                      <label class="form-label" for="edit-project-client">Client</label>
                       <input type="text" id="edit-project-client" class="form-input" value="${currentProject.client && currentProject.client !== 'None' ? currentProject.client : ''}" placeholder="Internal / None" />
                     </div>
                   </div>
 
-                  <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem;">
+                  <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.65rem;">
                     <div class="form-group">
                       <label class="form-label" for="edit-project-category">Category</label>
                       <select id="edit-project-category" class="studio-select" style="width: 100%;">
@@ -192,34 +198,28 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                     </div>
 
                     <div class="form-group">
-                      <label class="form-label" for="edit-project-tags">Tags (comma separated)</label>
-                      <input type="text" id="edit-project-tags" class="form-input font-mono" value="${(currentProject.tags || []).join(', ')}" placeholder="e.g. commercial, 4k, vfx" />
+                      <label class="form-label" for="edit-project-tags">Tags</label>
+                      <input type="text" id="edit-project-tags" class="form-input font-mono" value="${(currentProject.tags || []).join(', ')}" placeholder="e.g. promo, 4k" />
                     </div>
                   </div>
 
-                  <div class="form-group" style="margin-top: 0.75rem;">
-                    <label class="form-label" for="edit-project-desc">Description / Brief</label>
-                    <textarea id="edit-project-desc" class="form-textarea" rows="2" placeholder="Brief project summary or client deliverable goal...">${currentProject.description || ''}</textarea>
+                  <div class="form-group" style="margin-top: 0.65rem;">
+                    <label class="form-label" for="edit-project-desc">Description</label>
+                    <textarea id="edit-project-desc" class="form-textarea" rows="2" placeholder="Brief project summary...">${currentProject.description || ''}</textarea>
                   </div>
 
                   <!-- Filesystem Move / Rename Toggle -->
-                  <div class="form-group" style="margin-top: 1rem; padding: 0.85rem 1rem; border-radius: var(--radius-md); background-color: var(--bg-surface); border: 1px solid var(--border-subtle);">
-                    <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: 0.65rem; cursor: pointer; user-select: none;">
-                      <input type="checkbox" id="edit-sync-filesystem" style="margin-top: 0.2rem; accent-color: var(--color-primary); cursor: pointer; width: 15px; height: 15px;" />
-                      <div>
-                        <span style="font-weight: 600; font-size: 0.825rem; color: var(--text-primary);">Sync physical folder on disk</span>
-                        <p style="font-size: 0.725rem; color: var(--text-muted); margin-top: 0.15rem; line-height: 1.4;">
-                          Rename and/or move the actual project directory on your drive to match the new Title, Client, or Category.
-                        </p>
-                      </div>
+                  <div class="form-group" style="margin-top: 0.75rem; padding: 0.65rem 0.85rem; border-radius: var(--radius-md); background-color: var(--badge-bg); border: 1px solid var(--border-subtle);">
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; user-select: none;">
+                      <input type="checkbox" id="edit-sync-filesystem" style="accent-color: var(--color-primary); cursor: pointer; width: 15px; height: 15px;" />
+                      <span style="font-weight: 600; font-size: 0.8rem; color: var(--text-primary);">Sync physical folder name on disk</span>
                     </label>
-                    <div id="fs-sync-preview-box" class="font-mono" style="margin-top: 0.65rem; padding: 0.45rem 0.65rem; border-radius: var(--radius-xs); background: var(--bg-app); border: 1px dashed var(--border-strong); font-size: 0.7rem; color: var(--text-secondary);">
-                      <span style="color: var(--color-primary); font-weight: 700;">Disk Action:</span>
-                      <span id="fs-sync-preview-msg">Metadata only (folder location on disk remains unchanged).</span>
+                    <div id="fs-sync-preview-box" class="font-mono" style="margin-top: 0.45rem; font-size: 0.7rem; color: var(--text-muted);">
+                      <span id="fs-sync-preview-msg">Folder on disk remains unchanged.</span>
                     </div>
                   </div>
 
-                  <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.15rem;">
+                  <div style="display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 0.85rem;">
                     <button type="button" class="btn btn-secondary" id="cancel-edit-btn">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="save-metadata-btn">
                       ${icons.check} Save Changes
@@ -228,57 +228,56 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                 </form>
               </div>
             ` : `
-              <!-- Metrics Banner -->
-              <div class="modal-metrics-grid">
+              <!-- Single Surface Metrics Strip -->
+              <div class="modal-metrics-grid font-mono">
                 <div class="modal-metric-card">
-                  <span class="metric-label">Total Footprint</span>
-                  <span class="metric-val font-mono" style="color: var(--text-primary);">${formatBytes(currentProject.total_size || 0)}</span>
-                  <span class="metric-sub font-mono">${currentProject.file_count || 0} tracked files</span>
+                  <span class="metric-label">Footprint</span>
+                  <span class="metric-val">${formatBytes(currentProject.total_size || 0)}</span>
+                  <span class="metric-sub">${currentProject.file_count || 0} files</span>
                 </div>
                 <div class="modal-metric-card">
-                  <span class="metric-label">Media Assets</span>
-                  <span class="metric-val font-mono" style="color: var(--color-accent-cyan);">${formatBytes(currentProject.media_size || 0)}</span>
+                  <span class="metric-label">Media</span>
+                  <span class="metric-val" style="color: var(--color-accent-cyan);">${formatBytes(currentProject.media_size || 0)}</span>
                   <span class="metric-sub">RAW &amp; Audio</span>
                 </div>
                 <div class="modal-metric-card">
-                  <span class="metric-label">Reclaimable Cache</span>
-                  <span class="metric-val font-mono" style="color: var(--color-warning);">${formatBytes(currentProject.reclaimable_size || 0)}</span>
-                  <span class="metric-sub">Build caches</span>
+                  <span class="metric-label">Reclaimable</span>
+                  <span class="metric-val" style="color: var(--color-warning);">${formatBytes(currentProject.reclaimable_size || 0)}</span>
+                  <span class="metric-sub">Caches</span>
                 </div>
               </div>
 
-              <!-- Metadata Properties -->
+              <!-- Metadata Properties Table -->
               <div class="modal-section">
-                <h4 class="modal-section-heading">Project Metadata</h4>
                 <div class="modal-props-grid">
                   <div class="prop-item">
                     <span class="prop-label">Client</span>
                     <span class="prop-val">${currentProject.client && currentProject.client !== "None" ? currentProject.client : "Internal"}</span>
                   </div>
                   <div class="prop-item">
-                    <span class="prop-label">Date Created</span>
+                    <span class="prop-label">Created</span>
                     <span class="prop-val font-mono">${currentProject.created || "—"}</span>
                   </div>
                   <div class="prop-item">
-                    <span class="prop-label">Last Modified</span>
-                    <span class="prop-val font-mono">${currentProject.last_meaningful_update ? currentProject.last_meaningful_update.substring(0, 19).replace('T', ' ') : '—'}</span>
+                    <span class="prop-label">Modified</span>
+                    <span class="prop-val font-mono">${currentProject.last_meaningful_update ? currentProject.last_meaningful_update.substring(0, 10) : '—'}</span>
                   </div>
                   <div class="prop-item">
-                    <span class="prop-label">Obsidian Sync</span>
+                    <span class="prop-label">Vault Link</span>
                     <span class="prop-val font-mono" style="color: var(--color-success);">00_Notes &harr; Vault</span>
                   </div>
                 </div>
                 ${currentProject.description ? `
-                  <div style="margin-top: 0.75rem; padding: 0.6rem 0.8rem; background: var(--surface-bg-card); border-radius: 4px; font-size: 0.82rem; color: var(--text-secondary);">
+                  <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; margin-top: 0.35rem;">
                     ${currentProject.description}
-                  </div>
+                  </p>
                 ` : ''}
               </div>
             `}
 
-            <!-- Quick Paths & Native Launch -->
+            <!-- Location Row -->
             <div class="modal-section">
-              <h4 class="modal-section-heading">Location &amp; Terminal</h4>
+              <h4 class="modal-section-heading">Workspace Path</h4>
               <div class="modal-path-box">
                 <div class="path-display-row">
                   <span class="path-chip">Relative</span>
@@ -286,7 +285,7 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                   <button class="copy-path-btn" data-copy="${relPath}" title="Copy relative path" aria-label="Copy relative path">${icons.copy}</button>
                 </div>
                 <div class="path-display-row">
-                  <span class="path-chip">System Path</span>
+                  <span class="path-chip">System</span>
                   <code class="path-code font-mono" title="${fullPath}">${fullPath}</code>
                   <button class="copy-path-btn" data-copy="${fullPath}" title="Copy full path" aria-label="Copy full path">${icons.copy}</button>
                 </div>
@@ -295,21 +294,21 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
             <!-- Workspace Actions Strip (Explorer / Travel / Archive) -->
             <div class="modal-section">
-              <h4 class="modal-section-heading">Workspace Actions</h4>
-              <div class="workspace-actions-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;">
-                <button class="btn btn-secondary action-btn-explorer" id="modal-explore-files-btn">
+              <h4 class="modal-section-heading">Actions</h4>
+              <div class="workspace-actions-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
+                <button class="btn btn-secondary action-btn-explorer" id="modal-explore-files-btn" style="font-size: 0.785rem; padding: 0.4rem 0.65rem;">
                   ${icons.folderOpen}
                   Browse Files
                 </button>
-                <button class="btn btn-secondary action-btn-openos" id="modal-open-native-btn">
+                <button class="btn btn-secondary action-btn-openos" id="modal-open-native-btn" style="font-size: 0.785rem; padding: 0.4rem 0.65rem;">
                   ${icons.externalLink}
                   Open in OS
                 </button>
-                <button class="btn btn-secondary action-btn-travel" id="modal-travel-btn" title="Export to Shuttle Drive">
+                <button class="btn btn-secondary action-btn-travel" id="modal-travel-btn" style="font-size: 0.785rem; padding: 0.4rem 0.65rem;" title="Export to Shuttle Drive">
                   ${icons.travel}
                   Shuttle Travel
                 </button>
-                <button class="btn btn-secondary action-btn-archive" id="modal-archive-btn" style="color: var(--color-warning);" title="Move to Cold Storage">
+                <button class="btn btn-secondary action-btn-archive" id="modal-archive-btn" style="color: var(--color-warning); font-size: 0.785rem; padding: 0.4rem 0.65rem;" title="Move to Cold Storage">
                   ${icons.archive}
                   Archive
                 </button>
@@ -333,14 +332,13 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                       <span class="tree-line">${idx === folderTree.length - 1 ? '└─' : '├─'}</span>
                       <span class="tree-folder-icon">${icons.folder}</span>
                       <span class="tree-name ${f === '00_Notes' ? 'notes-highlight' : ''}">${f}</span>
-                      ${f === '00_Notes' ? '<span class="tree-tag-obsidian">Obsidian Brain</span>' : ''}
+                      ${f === '00_Notes' ? '<span class="tree-tag-obsidian">Obsidian</span>' : ''}
                     </div>
                   `).join("")}
                   <div class="tree-node">
                     <span class="tree-line">└─</span>
                     <span class="tree-file-icon">${icons.file}</span>
                     <span class="tree-name font-mono">meta.json</span>
-                    <span class="tree-tag-meta">Metadata</span>
                   </div>
                 </div>
               </div>
@@ -349,12 +347,12 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
           <!-- Modal Footer Actions -->
           <div class="modal-footer">
-            <button class="btn btn-secondary" id="modal-copy-cd-btn">
+            <button class="btn btn-secondary" id="modal-copy-cd-btn" style="font-size: 0.8rem;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
               Copy Terminal cd
             </button>
-            <a href="#storage?project=${encodeURIComponent(currentProject.slug || currentProject.name || '')}" class="btn btn-primary" id="modal-view-storage-btn">
-              View in Storage Table
+            <a href="#storage?project=${encodeURIComponent(currentProject.slug || currentProject.name || '')}" class="btn btn-primary" id="modal-view-storage-btn" style="font-size: 0.8rem;">
+              Storage Analytics
             </a>
           </div>
         </div>
@@ -367,7 +365,7 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
   function closeModal() {
     modalContainer.style.display = "none";
-    document.body.style.overflow = "";
+    unlockBodyScroll();
     modalContainer.innerHTML = "";
     activeModalCloser = null;
   }
@@ -516,8 +514,9 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
     // Open Natively in OS
     document.getElementById("modal-open-native-btn")?.addEventListener("click", async () => {
       try {
+        const targetPath = currentProject.path || currentProject.relative_path || currentProject.slug || currentProject.name || "";
         showToast("Opening project folder natively...", "info", 1500);
-        await api.openPath(currentProject.path);
+        await api.openPath(targetPath);
       } catch (err) {
         showToast(`Failed to open: ${err.message}`, "error");
       }
@@ -646,11 +645,11 @@ export async function openResurrectModal(onResurrected = () => {}) {
   `;
 
   modalContainer.style.display = "block";
-  document.body.style.overflow = "hidden";
+  lockBodyScroll();
 
   function closeModal() {
     modalContainer.style.display = "none";
-    document.body.style.overflow = "";
+    unlockBodyScroll();
     modalContainer.innerHTML = "";
     activeModalCloser = null;
   }
@@ -680,33 +679,33 @@ export async function openResurrectModal(onResurrected = () => {}) {
       if (filtered.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
-            <h3 style="margin-bottom: 0.35rem; color: var(--text-primary); font-size: 1.05rem;">
-              ${archivedProjects.length === 0 ? 'No Archived Projects Found' : 'No Matches Found'}
+            <h3 style="margin-bottom: 0.35rem; color: var(--text-primary); font-size: 1rem;">
+              ${archivedProjects.length === 0 ? 'No Archived Projects' : 'No Matches Found'}
             </h3>
-            <p style="font-size: 0.85rem;">${archivedProjects.length === 0 ? 'Your cold archive storage has no archived projects' : `No projects matching "${query}"`}</p>
+            <p style="font-size: 0.8rem;">${archivedProjects.length === 0 ? 'No projects currently in cold storage.' : `No projects matching "${query}"`}</p>
           </div>
         `;
         return;
       }
 
       container.innerHTML = `
-        <div class="archived-cards-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div class="archived-cards-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
           ${filtered.map(p => {
             const iconSvg = getCategoryIconSvg(p.type);
             return `
-              <div class="archived-item-card" style="display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; background: var(--surface-bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; gap: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem; min-width: 0;">
-                  <div class="card-icon-tag" style="width: 32px; height: 32px; font-size: 14px; flex-shrink: 0;">${iconSvg}</div>
+              <div class="archived-item-card" style="display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.9rem; background: var(--badge-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); gap: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.65rem; min-width: 0;">
+                  <div class="card-icon-tag" style="width: 28px; height: 28px; font-size: 13px; flex-shrink: 0;">${iconSvg}</div>
                   <div style="min-width: 0;">
-                    <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-primary); font-weight: 600;" class="text-ellipsis">${p.name}</h4>
-                    <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; gap: 0.75rem; margin-top: 0.2rem;" class="font-mono">
+                    <h4 style="margin: 0; font-size: 0.875rem; color: var(--text-primary); font-weight: 600;" class="text-ellipsis">${p.name}</h4>
+                    <div style="font-size: 0.7rem; color: var(--text-muted); display: flex; gap: 0.65rem; margin-top: 0.15rem;" class="font-mono">
                       <span>${p.type}</span>
                       <span>Client: ${p.client && p.client !== 'None' ? p.client : 'Internal'}</span>
                       <span>${p.created || ''}</span>
                     </div>
                   </div>
                 </div>
-                <button class="btn btn-primary restore-action-btn" data-name="${p.name || p.slug}" style="flex-shrink: 0; padding: 0.4rem 0.85rem; font-size: 0.8rem;">
+                <button class="btn btn-primary restore-action-btn" data-name="${p.name || p.slug}" style="flex-shrink: 0; padding: 0.35rem 0.75rem; font-size: 0.785rem;">
                   ${icons.resurrect}
                   Restore
                 </button>
@@ -744,8 +743,8 @@ export async function openResurrectModal(onResurrected = () => {}) {
     if (container) {
       container.innerHTML = `
         <div class="empty-state" style="border-color: var(--color-danger);">
-          <h3 style="color: var(--color-danger); margin-bottom: 0.35rem; font-size: 1.05rem;">Cannot Access Archive</h3>
-          <p style="font-size: 0.85rem;">${err.message}</p>
+          <h3 style="color: var(--color-danger); margin-bottom: 0.35rem; font-size: 1rem;">Cannot Access Archive</h3>
+          <p style="font-size: 0.8rem;">${err.message}</p>
         </div>
       `;
     }
@@ -783,28 +782,28 @@ export function openLiveSyncModal(onComplete = () => {}) {
         </div>
 
         <div class="modal-body">
-          <div class="sync-live-summary" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
-            <div class="modal-metric-card" style="padding: 0.75rem 1rem;">
+          <div class="sync-live-summary" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <div class="modal-metric-card" style="padding: 0.65rem 0.85rem; background: var(--badge-bg); border-radius: var(--radius-md);">
               <span class="metric-label">Status</span>
-              <span class="metric-val font-mono" id="sync-metric-status" style="font-size: 1.1rem; color: var(--color-accent-cyan);">Connecting</span>
+              <span class="metric-val font-mono" id="sync-metric-status" style="font-size: 1rem; color: var(--color-accent-cyan);">Connecting</span>
             </div>
-            <div class="modal-metric-card" style="padding: 0.75rem 1rem;">
-              <span class="metric-label">Projects Scanned</span>
-              <span class="metric-val font-mono" id="sync-metric-projects" style="font-size: 1.1rem;">0</span>
+            <div class="modal-metric-card" style="padding: 0.65rem 0.85rem; background: var(--badge-bg); border-radius: var(--radius-md);">
+              <span class="metric-label">Scanned</span>
+              <span class="metric-val font-mono" id="sync-metric-projects" style="font-size: 1rem;">0</span>
             </div>
-            <div class="modal-metric-card" style="padding: 0.75rem 1rem;">
-              <span class="metric-label">Notes Synced</span>
-              <span class="metric-val font-mono" id="sync-metric-changes" style="font-size: 1.1rem; color: var(--color-success);">0</span>
+            <div class="modal-metric-card" style="padding: 0.65rem 0.85rem; background: var(--badge-bg); border-radius: var(--radius-md);">
+              <span class="metric-label">Synced</span>
+              <span class="metric-val font-mono" id="sync-metric-changes" style="font-size: 1rem; color: var(--color-success);">0</span>
             </div>
           </div>
 
-          <div class="log-console" style="display: block; max-height: 280px; overflow-y: auto;">
+          <div class="log-console" style="display: block; max-height: 240px; overflow-y: auto;">
             <div class="console-top-bar">
-              <span class="console-title font-mono">Server-Sent Events Stream (SSE)</span>
+              <span class="console-title font-mono">Stream Log</span>
               <span id="sync-stream-status" class="console-time font-mono">Live</span>
             </div>
-            <div id="sync-stream-log-body" class="console-body font-mono" style="font-size: 0.78rem;">
-              <div class="log-entry"><span>Connecting to /api/sync/stream...</span></div>
+            <div id="sync-stream-log-body" class="console-body font-mono" style="font-size: 0.75rem;">
+              <div class="log-entry"><span>Connecting to sync stream...</span></div>
             </div>
           </div>
         </div>
@@ -819,14 +818,14 @@ export function openLiveSyncModal(onComplete = () => {}) {
   `;
 
   modalContainer.style.display = "block";
-  document.body.style.overflow = "hidden";
+  lockBodyScroll();
 
   let closeStream = null;
 
   function closeModal() {
     if (closeStream) closeStream();
     modalContainer.style.display = "none";
-    document.body.style.overflow = "";
+    unlockBodyScroll();
     modalContainer.innerHTML = "";
     activeModalCloser = null;
   }

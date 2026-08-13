@@ -25,7 +25,6 @@
 .project-card:hover, .project-card:focus-visible {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
 }
 
 .project-card:focus-visible {
@@ -298,7 +297,6 @@
 .client-card:hover, .client-card:focus-visible {
   border-color: var(--color-primary);
   box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
 }
 
 .client-card:focus-visible {

@@ -17,39 +17,39 @@ export async function renderDashboard(container) {
 
   container.innerHTML = `
     <!-- Top Telemetry Stats Strip -->
-    <div id="dashboard-stats" style="margin-bottom: 1.5rem;"></div>
+    <div id="dashboard-stats" style="margin-bottom: 1.25rem;"></div>
 
     <!-- Integrated Studio Toolbar -->
     <div class="studio-toolbar">
       <div class="search-box">
         <span class="search-icon">${icons.search}</span>
-        <input type="text" id="project-search-input" class="search-input" placeholder="Filter projects by name, path, client..." />
+        <input type="text" id="project-search-input" class="search-input" placeholder="Search by name, client, path..." />
         <span class="search-kbd-hint">/</span>
       </div>
 
       <div class="toolbar-controls">
-        <button id="dashboard-sync-btn" class="btn btn-secondary" title="Live sync notes with Obsidian Vault" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">
+        <button id="dashboard-sync-btn" class="btn btn-secondary" title="Live sync notes with Obsidian Vault" style="padding: 0.35rem 0.7rem; font-size: 0.785rem;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Sync Brain
+          Sync Notes
         </button>
 
-        <button id="dashboard-resurrect-btn" class="btn btn-secondary" title="Restore projects from cold archive" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">
+        <button id="dashboard-resurrect-btn" class="btn btn-secondary" title="Restore projects from cold archive" style="padding: 0.35rem 0.7rem; font-size: 0.785rem;">
           ${icons.resurrect}
           Resurrect
         </button>
 
         <select id="status-filter-select" class="studio-select" aria-label="Filter status">
           <option value="all">All Status</option>
-          <option value="active">Active Only</option>
-          <option value="stale">Stale Only (&gt;90d)</option>
+          <option value="active">Active</option>
+          <option value="stale">Stale (&gt;90d)</option>
         </select>
 
         <select id="sort-select" class="studio-select" aria-label="Sort projects">
-          <option value="created_desc">Date (Newest)</option>
-          <option value="created_asc">Date (Oldest)</option>
-          <option value="size_desc">Size (Largest)</option>
-          <option value="size_asc">Size (Smallest)</option>
-          <option value="name_asc">Name (A &rarr; Z)</option>
+          <option value="created_desc">Newest</option>
+          <option value="created_asc">Oldest</option>
+          <option value="size_desc">Largest</option>
+          <option value="size_asc">Smallest</option>
+          <option value="name_asc">Name A–Z</option>
           <option value="activity_desc">Recent Activity</option>
         </select>
 
@@ -68,11 +68,11 @@ export async function renderDashboard(container) {
     <div id="category-filters" class="category-channel-strip"></div>
 
     <!-- Projects Grid / List Container -->
-    <div id="projects-container">
+    <div id="projects-container" style="min-height: 280px;">
       ${hasCache ? '' : `
         <div class="loading-state">
           <div class="spinner"></div>
-          <p>Scanning CreativeOS workspace index...</p>
+          <p>Scanning workspace...</p>
         </div>
       `}
     </div>

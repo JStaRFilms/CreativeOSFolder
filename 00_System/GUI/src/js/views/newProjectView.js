@@ -1,5 +1,5 @@
 /**
- * New Project View — Interactive Studio Scaffold
+ * New Project View — Interactive Studio Scaffold with Subfolder Tree Navigator
  */
 
 import { api } from "../api.js";
@@ -8,14 +8,14 @@ import { showToast } from "../components/toast.js";
 
 export async function renderNewProject(container) {
   container.innerHTML = `
-    <div class="form-container">
-      <div class="page-header" style="justify-content: center; text-align: center; margin-bottom: 1.75rem;">
+    <div class="form-container" id="scaffold-form-container">
+      <div class="page-header" style="text-align: left; margin-bottom: 1.25rem;">
         <div>
-          <div class="page-eyebrow" style="justify-content: center;">
+          <div class="page-eyebrow">
             <span>SCAFFOLD WORKSPACE</span>
           </div>
-          <h1 class="page-title">Create New Project</h1>
-          <p class="page-description">Generate a structured workspace directory with category blueprints and Obsidian notes linkage</p>
+          <h1 class="page-title">New Project</h1>
+          <p class="page-description">Generate a structured workspace directory with category blueprints and note templates</p>
         </div>
       </div>
 
@@ -28,8 +28,8 @@ export async function renderNewProject(container) {
                 <span>Project Name</span>
                 <span class="required-star">*</span>
               </label>
-              <input type="text" id="project-name" class="form-input" placeholder="e.g. Summer Promo, Brand Redesign, AI Agent Hub" required autofocus autocomplete="off" />
-              <span class="form-hint">Spaces and hyphens are supported; special characters will be sanitized automatically.</span>
+              <input type="text" id="project-name" class="form-input" placeholder="e.g. Summer Promo, Brand Redesign" required autofocus autocomplete="off" />
+              <span class="form-hint">Special characters are automatically sanitized.</span>
             </div>
 
             <!-- Category & Client -->
@@ -37,55 +37,69 @@ export async function renderNewProject(container) {
               <div class="form-group">
                 <label class="form-label" for="project-category">Category Blueprint</label>
                 <select id="project-category" class="form-select">
-                  <option value="Video">Video — Video production projects</option>
+                  <option value="Video">Video — Production</option>
                 </select>
               </div>
 
               <div class="form-group">
                 <label class="form-label" for="project-client">Client (Optional)</label>
-                <input type="text" id="project-client" class="form-input" placeholder="e.g. Nike, Acme Corp, Sony" autocomplete="off" />
-                <span class="form-hint">Places project inside <code>01_Projects/Clients/[Client]/</code></span>
+                <input type="text" id="project-client" class="form-input" placeholder="e.g. Nike, Acme Corp" autocomplete="off" />
+                <span class="form-hint">Places inside <code>Clients/[Client]/</code></span>
               </div>
             </div>
 
-            <!-- Destination Folder Mode -->
-            <div class="form-group" style="padding: 1rem; border-radius: var(--radius-md); background: var(--bg-surface); border: 1px solid var(--border-subtle);">
-              <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: 0.65rem; cursor: pointer; user-select: none;">
-                <input type="checkbox" id="project-custom-subfolder-toggle" style="margin-top: 0.2rem; accent-color: var(--color-primary); width: 15px; height: 15px;" />
+            <!-- Destination Folder Mode (Inline Accordion) -->
+            <div class="form-group" style="padding: 0.75rem 0.85rem; border-radius: var(--radius-md); background: var(--badge-bg); border: 1px solid var(--border-subtle);">
+              <label class="checkbox-label" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
                 <div>
-                  <span style="font-weight: 600; font-size: 0.825rem; color: var(--text-primary);">Nest inside specific subfolder or child hierarchy</span>
-                  <p style="font-size: 0.725rem; color: var(--text-muted); margin-top: 0.15rem; line-height: 1.4;">
-                    Nest this project inside a sub-directory under the selected category or client (e.g. <code>2026_Campaigns/Series_1</code>).
+                  <span style="font-weight: 600; font-size: 0.8rem; color: var(--text-primary);">Custom Subfolder Location</span>
+                  <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.1rem;">
+                    Nest project within a sub-directory
                   </p>
                 </div>
+                <input type="checkbox" id="project-custom-subfolder-toggle" class="toggle-checkbox" />
               </label>
 
-              <div id="custom-subfolder-box" style="display: none; margin-top: 0.75rem;">
-                <div style="font-size: 0.75rem; margin-bottom: 0.35rem; color: var(--text-secondary);">
-                  <span>Base starting location: </span>
-                  <strong id="subfolder-base-badge" class="font-mono" style="color: var(--color-primary);">01_Projects/Video/</strong>
+              <div id="subfolder-inline-panel" class="subfolder-inline-panel" style="display: none;">
+                <div class="subfolder-panel-header">
+                  <div class="subfolder-panel-title">
+                    ${icons.folder}
+                    <span>Folder Navigator</span>
+                  </div>
+                  <button type="button" class="btn btn-secondary" id="refresh-tree-btn" title="Refresh Tree" style="padding: 0.2rem 0.45rem; font-size: 0.75rem;">
+                    ${icons.refresh}
+                  </button>
                 </div>
-                <div style="display: flex; gap: 0.5rem;">
-                  <input type="text" id="project-subfolder-input" class="form-input font-mono" placeholder="e.g. 2026_Campaigns/Summer or Experiments/Phase1" style="font-size: 0.8rem;" list="existing-folders-list" />
-                  <datalist id="existing-folders-list"></datalist>
+
+                <div class="subfolder-target-badge">
+                  <span class="target-badge-label">Destination</span>
+                  <span id="sidepanel-target-path" class="target-badge-path font-mono">01_Projects/Video/</span>
                 </div>
-                <span class="form-hint" style="font-size: 0.7rem;">Enter any folder structure inside the base; all intermediate directories will be generated automatically.</span>
+
+                <div id="subfolder-tree-list" class="tree-explorer">
+                  <div style="padding: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">Loading folders...</div>
+                </div>
+
+                <div style="display: flex; gap: 0.4rem; align-items: center;">
+                  <input type="text" id="project-subfolder-input" class="form-input font-mono" placeholder="Selected path or type e.g. 2026/Campaigns" style="font-size: 0.75rem; padding: 0.35rem 0.6rem;" />
+                  <button type="button" class="btn btn-secondary" id="reset-subfolder-btn" style="padding: 0.35rem 0.6rem; font-size: 0.725rem; white-space: nowrap;">Reset</button>
+                </div>
               </div>
             </div>
 
             <!-- Date Override -->
             <div class="form-group">
-              <label class="form-label" for="project-date">Date Override (Optional)</label>
+              <label class="form-label" for="project-date">Date Prefix (Optional)</label>
               <input type="date" id="project-date" class="form-input" />
-              <span class="form-hint">Leave blank to use today's timestamp (<code>YYYY-MM-DD</code>) for the directory slug prefix.</span>
+              <span class="form-hint">Defaults to today's date (<code>YYYY-MM-DD</code>).</span>
             </div>
 
-            <!-- Blueprint Options -->
+            <!-- Blueprint Switches -->
             <div class="form-group-switches">
               <label class="switch-row">
                 <div class="switch-info">
                   <span class="switch-title">Initialize Git Repository</span>
-                  <span class="switch-desc">Creates <code>.git</code> repository and studio <code>.gitignore</code></span>
+                  <span class="switch-desc">Creates <code>.git</code> repository and <code>.gitignore</code></span>
                 </div>
                 <input type="checkbox" id="project-git" class="toggle-checkbox" />
               </label>
@@ -93,16 +107,16 @@ export async function renderNewProject(container) {
               <label class="switch-row">
                 <div class="switch-info">
                   <span class="switch-title">Minimal Template</span>
-                  <span class="switch-desc">Use streamlined notes-only scaffold (<code>00_Notes/</code>) instead of full category structure</span>
+                  <span class="switch-desc">Notes-only scaffold (<code>00_Notes/</code>)</span>
                 </div>
                 <input type="checkbox" id="project-simple" class="toggle-checkbox" />
               </label>
             </div>
 
-            <!-- Live Interactive Folder Tree Preview -->
-            <div class="scaffold-preview-card">
+            <!-- Live Scaffold Directory Preview -->
+            <div class="scaffold-preview-section">
               <div class="preview-card-header">
-                <span class="preview-card-title">Scaffold Directory Preview</span>
+                <span class="preview-card-title">Scaffold Preview</span>
                 <span id="preview-category-tag" class="card-cat-badge">Video</span>
               </div>
               <div id="preview-slug-path" class="preview-path font-mono">01_Projects/Video/YYYY-MM-DD_Project_Name</div>
@@ -128,26 +142,12 @@ export async function renderNewProject(container) {
   let categoriesData = {};
   let defaultCategory = "Video";
   let simpleStructure = { "00_Notes": ["Notes.md", "Client_Links.md"] };
+  let allProjects = [];
 
-  // Load existing folder paths for datalist suggestions
   try {
-    const projects = await api.getProjects();
-    const folderSet = new Set();
-    projects.forEach(p => {
-      if (p.relative_path) {
-        const parts = p.relative_path.split("/");
-        parts.pop(); // Remove project name to get parent folder
-        if (parts.length > 1) {
-          folderSet.add(parts.slice(1).join("/"));
-        }
-      }
-    });
-    const datalist = document.getElementById("existing-folders-list");
-    if (datalist) {
-      datalist.innerHTML = Array.from(folderSet).sort().map(f => `<option value="${f}"></option>`).join("");
-    }
+    allProjects = await api.getProjects();
   } catch (err) {
-    console.warn("Could not load folder suggestions:", err);
+    console.warn("Could not load projects for tree:", err);
   }
 
   try {
@@ -169,6 +169,7 @@ export async function renderNewProject(container) {
     console.warn("Could not load categories for form:", err);
   }
 
+  const scaffoldContainer = document.getElementById("scaffold-form-container");
   const nameInput = document.getElementById("project-name");
   const categorySelect = document.getElementById("project-category");
   const clientInput = document.getElementById("project-client");
@@ -176,23 +177,144 @@ export async function renderNewProject(container) {
   const gitCheckbox = document.getElementById("project-git");
   const simpleCheckbox = document.getElementById("project-simple");
   const customSubfolderToggle = document.getElementById("project-custom-subfolder-toggle");
-  const customSubfolderBox = document.getElementById("custom-subfolder-box");
+  const subfolderInlinePanel = document.getElementById("subfolder-inline-panel");
   const subfolderInput = document.getElementById("project-subfolder-input");
-  const subfolderBaseBadge = document.getElementById("subfolder-base-badge");
+  const subfolderTreeList = document.getElementById("subfolder-tree-list");
+  const sidepanelTargetPath = document.getElementById("sidepanel-target-path");
+  const refreshTreeBtn = document.getElementById("refresh-tree-btn");
+  const resetSubfolderBtn = document.getElementById("reset-subfolder-btn");
+
   const previewSlugPath = document.getElementById("preview-slug-path");
   const previewCategoryTag = document.getElementById("preview-category-tag");
   const treeOutput = document.getElementById("scaffold-tree-output");
   const form = document.getElementById("new-project-form");
   const submitBtn = document.getElementById("submit-project-btn");
 
+  function getBaseRelative() {
+    const selectedCat = categorySelect?.value || defaultCategory;
+    const catConfig = categoriesData[selectedCat] || {};
+    const catFolder = catConfig.physical_folder || selectedCat;
+    const client = (clientInput?.value || "").trim();
+
+    if (client) {
+      const safeClient = client.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_");
+      return `Clients/${safeClient}`;
+    }
+    return catFolder;
+  }
+
+  async function loadSubfolderTree() {
+    if (!subfolderTreeList) return;
+    const baseRel = getBaseRelative();
+    const currentSub = (subfolderInput?.value || "").trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+
+    subfolderTreeList.innerHTML = `<div class="loading-state" style="padding: 0.75rem 0; font-size: 0.75rem;">Scanning folders in ${baseRel}...</div>`;
+
+    try {
+      // 1. Try listing physical folders via API
+      let fsEntries = [];
+      try {
+        const fsRes = await api.listFiles(baseRel);
+        fsEntries = (fsRes.entries || []).filter(e => e.is_dir);
+      } catch (e) {
+        // Base folder might not exist on disk yet
+      }
+
+      // 2. Extract nested paths from projects matching this base
+      const discoveredSubpaths = new Set();
+      allProjects.forEach(p => {
+        if (p.relative_path && p.relative_path.startsWith(baseRel + "/")) {
+          const rest = p.relative_path.substring(baseRel.length + 1);
+          const parts = rest.split("/");
+          parts.pop(); // Remove project folder
+          if (parts.length > 0) {
+            for (let i = 1; i <= parts.length; i++) {
+              discoveredSubpaths.add(parts.slice(0, i).join("/"));
+            }
+          }
+        }
+      });
+
+      fsEntries.forEach(e => {
+        discoveredSubpaths.add(e.name);
+      });
+
+      const sortedPaths = Array.from(discoveredSubpaths).sort();
+
+      let html = `
+        <div class="tree-explorer-item ${!currentSub ? 'is-selected' : ''}" data-subpath="">
+          <div class="tree-item-name">
+            <span style="color: var(--color-primary);">${icons.folder}</span>
+            <span><strong>/ (Root)</strong></span>
+          </div>
+          <span class="tree-item-tag">Base</span>
+        </div>
+      `;
+
+      if (sortedPaths.length === 0) {
+        html += `
+          <div style="padding: 0.5rem; font-size: 0.725rem; color: var(--text-muted); font-style: italic;">
+            No subfolders inside <code>${baseRel}/</code>. Type one below to create it.
+          </div>
+        `;
+      } else {
+        sortedPaths.forEach(sub => {
+          const isSelected = currentSub === sub;
+          const depth = sub.split("/").length - 1;
+          const indent = depth * 12;
+          const displayName = sub.split("/").pop();
+
+          html += `
+            <div class="tree-explorer-item ${isSelected ? 'is-selected' : ''}" data-subpath="${sub}" style="padding-left: ${0.5 + (indent / 16)}rem;">
+              <div class="tree-item-name">
+                <span style="color: ${isSelected ? 'var(--color-primary)' : 'var(--text-muted)'};">${icons.folder}</span>
+                <span class="font-mono">${displayName}</span>
+              </div>
+              <span class="tree-item-tag">${sub}</span>
+            </div>
+          `;
+        });
+      }
+
+      subfolderTreeList.innerHTML = html;
+
+      // Attach click listeners to tree items
+      subfolderTreeList.querySelectorAll(".tree-explorer-item").forEach(item => {
+        item.addEventListener("click", () => {
+          const sub = item.getAttribute("data-subpath") || "";
+          if (subfolderInput) subfolderInput.value = sub;
+          updateScaffoldPreview();
+          loadSubfolderTree();
+        });
+      });
+    } catch (err) {
+      subfolderTreeList.innerHTML = `<div style="color: var(--color-danger); font-size: 0.75rem;">Failed to load tree: ${err.message}</div>`;
+    }
+  }
+
   customSubfolderToggle?.addEventListener("change", () => {
-    if (customSubfolderBox) {
-      customSubfolderBox.style.display = customSubfolderToggle.checked ? "block" : "none";
+    const isChecked = customSubfolderToggle.checked;
+    if (subfolderInlinePanel) subfolderInlinePanel.style.display = isChecked ? "flex" : "none";
+    if (isChecked) {
+      loadSubfolderTree();
     }
     updateScaffoldPreview();
   });
 
-  subfolderInput?.addEventListener("input", updateScaffoldPreview);
+  subfolderInput?.addEventListener("input", () => {
+    updateScaffoldPreview();
+    loadSubfolderTree();
+  });
+
+  resetSubfolderBtn?.addEventListener("click", () => {
+    if (subfolderInput) subfolderInput.value = "";
+    updateScaffoldPreview();
+    loadSubfolderTree();
+  });
+
+  refreshTreeBtn?.addEventListener("click", () => {
+    loadSubfolderTree();
+  });
 
   function updateScaffoldPreview() {
     const rawName = (nameInput?.value || "").trim() || "My_New_Project";
@@ -209,24 +331,21 @@ export async function renderNewProject(container) {
     const slug = `${datePrefix}_${safeName}`;
     const selectedCat = categorySelect?.value || defaultCategory;
     const catConfig = categoriesData[selectedCat] || {};
-    const catFolder = catConfig.physical_folder || selectedCat;
-    const client = (clientInput?.value || "").trim();
+    const baseRel = getBaseRelative();
     const isSimple = simpleCheckbox?.checked || false;
     const isGit = gitCheckbox?.checked || false;
     const useCustomSubfolder = customSubfolderToggle?.checked || false;
     const customSubfolderVal = (subfolderInput?.value || "").trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 
-    let baseRel = `01_Projects/${catFolder}`;
-    if (client) {
-      const safeClient = client.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_");
-      baseRel = `01_Projects/Clients/${safeClient}`;
+    const fullBaseRel = `01_Projects/${baseRel}`;
+
+    let targetPath = `${fullBaseRel}/${slug}`;
+    if (useCustomSubfolder && customSubfolderVal) {
+      targetPath = `${fullBaseRel}/${customSubfolderVal}/${slug}`;
     }
 
-    if (subfolderBaseBadge) subfolderBaseBadge.textContent = `${baseRel}/`;
-
-    let targetPath = `${baseRel}/${slug}`;
-    if (useCustomSubfolder && customSubfolderVal) {
-      targetPath = `${baseRel}/${customSubfolderVal}/${slug}`;
+    if (sidepanelTargetPath) {
+      sidepanelTargetPath.textContent = useCustomSubfolder && customSubfolderVal ? `${fullBaseRel}/${customSubfolderVal}/` : `${fullBaseRel}/`;
     }
 
     if (previewSlugPath) previewSlugPath.textContent = targetPath;
@@ -305,8 +424,14 @@ export async function renderNewProject(container) {
   }
 
   nameInput?.addEventListener("input", updateScaffoldPreview);
-  categorySelect?.addEventListener("change", updateScaffoldPreview);
-  clientInput?.addEventListener("input", updateScaffoldPreview);
+  categorySelect?.addEventListener("change", () => {
+    updateScaffoldPreview();
+    if (customSubfolderToggle?.checked) loadSubfolderTree();
+  });
+  clientInput?.addEventListener("input", () => {
+    updateScaffoldPreview();
+    if (customSubfolderToggle?.checked) loadSubfolderTree();
+  });
   dateInput?.addEventListener("change", updateScaffoldPreview);
   gitCheckbox?.addEventListener("change", updateScaffoldPreview);
   simpleCheckbox?.addEventListener("change", updateScaffoldPreview);

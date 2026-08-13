@@ -85,6 +85,12 @@
   --console-bg: #f8fafc;
   --console-text: #334155;
   --console-border: #e2e8f0;
+
+  --scrollbar-track: #f1f5f9;
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-thumb-hover: #94a3b8;
+  --skeleton-bg: #e2e8f0;
+  --skeleton-highlight: #f8fafc;
 }
 
 /* Dark Theme — True Studio Obsidian / Neutral Charcoal */
@@ -103,7 +109,7 @@
   --bg-surface-hover: #1e1e24;
   --bg-surface-active: #26262e;
   --bg-header: rgba(18, 18, 21, 0.94);
-  --bg-modal-backdrop: rgba(0, 0, 0, 0.8);
+  --bg-modal-backdrop: rgba(0, 0, 0, 0.75);
 
   --border-subtle: #222227;
   --border-strong: #2f2f37;
@@ -131,4 +137,10 @@
   --console-bg: #09090b;
   --console-text: #94a3b8;
   --console-border: #222227;
+
+  --scrollbar-track: #121215;
+  --scrollbar-thumb: #2f2f37;
+  --scrollbar-thumb-hover: #52525b;
+  --skeleton-bg: #18181c;
+  --skeleton-highlight: #222227;
 }
