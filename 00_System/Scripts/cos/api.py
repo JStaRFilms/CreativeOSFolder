@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import os
+import sys
+import json
+import shutil
+import datetime
+import subprocess
 from pathlib import Path
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -18,6 +23,10 @@ from .config import (
     PROJECTS_PATH,
     ROOT_PATH,
     VAULT_PATH,
+    EXPORTS_PATH,
+    DOWNLOADS_PATH,
+    SHUTTLE_PATH,
+    ARCHIVE_PATH,
     _load_config,
     logger,
 )
@@ -38,8 +47,10 @@ from .storage import (
     refresh_storage_index,
     stale_projects,
 )
+from .security import sanitize_path_input, validate_client_name
+from .file_utils import robust_rmtree
 from .commands.new import create_project_structure
-from .commands.sync import run_sync
+from .commands.sync import run_sync, stream_sync
 
 app = FastAPI(
     title="CreativeOS API",
@@ -58,6 +69,96 @@ app.add_middleware(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Security Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _get_allowed_roots() -> list[Path]:
+    """Return all permitted filesystem roots for CreativeOS operations."""
+    roots: list[Path] = []
+    candidates = [
+        ROOT_PATH,
+        PROJECTS_PATH,
+        EXPORTS_PATH,
+        VAULT_PATH,
+        DOWNLOADS_PATH,
+        SHUTTLE_PATH,
+        ARCHIVE_PATH,
+    ]
+    for p in candidates:
+        if p and isinstance(p, str):
+            try:
+                roots.append(Path(p).resolve())
+            except Exception:
+                pass
+    return roots
+
+
+def _check_path_allowed(target_path: str | Path) -> Path:
+    """Verify that a path is strictly inside allowed workspace boundaries."""
+    try:
+        resolved = Path(target_path).resolve()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid path: {e}",
+        )
+
+    allowed = _get_allowed_roots()
+    is_safe = any(
+        resolved == root or root in resolved.parents
+        for root in allowed
+    )
+    if not is_safe:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: Target path is outside permitted workspace roots: {resolved}",
+        )
+    return resolved
+
+
+def _find_project_dir(project_name: str, search_root: str | None = None) -> tuple[Path, dict[str, Any]]:
+    """Locate a project directory and its metadata by slug, name, or relative path."""
+    root = search_root or PROJECTS_PATH
+    search_name = project_name.lower().strip()
+
+    # 1. Direct subpath check
+    candidate = Path(root) / project_name
+    if candidate.is_dir() and (candidate / ".project_meta.json").is_file():
+        try:
+            with open(candidate / ".project_meta.json", "r", encoding="utf-8-sig") as f:
+                return candidate, json.load(f)
+        except Exception:
+            pass
+
+    # 2. Search through discovered projects
+    discovered = discover_projects(root)
+    for proj_path, meta in discovered:
+        p_name = (meta.get("name") or "").lower()
+        p_slug = (meta.get("slug") or "").lower()
+        p_dir = proj_path.name.lower()
+        try:
+            p_rel = proj_path.relative_to(Path(root)).as_posix().lower()
+        except Exception:
+            p_rel = ""
+
+        if search_name in (p_name, p_slug, p_dir, p_rel):
+            return proj_path, meta
+
+    # 3. Partial match fallback
+    for proj_path, meta in discovered:
+        p_name = (meta.get("name") or "").lower()
+        p_slug = (meta.get("slug") or "").lower()
+        p_dir = proj_path.name.lower()
+        if search_name in p_name or search_name in p_slug or search_name in p_dir:
+            return proj_path, meta
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Project '{project_name}' not found",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Pydantic Request Models
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -70,8 +171,22 @@ class CreateProjectRequest(BaseModel):
     git: bool = Field(default=False, description="Initialize Git repository")
 
 
+class UpdateProjectRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100, description="Updated project name")
+    client: Optional[str] = Field(default=None, max_length=50, description="Updated client name")
+    category: Optional[str] = Field(default=None, description="Updated category/type")
+    description: Optional[str] = Field(default=None, description="Project summary description")
+    tags: Optional[list[str]] = Field(default=None, description="Project tags")
+    status: Optional[str] = Field(default=None, description="Project workflow status")
+    custom_meta: Optional[dict[str, Any]] = Field(default=None, description="Additional custom metadata")
+
+
+class OpenPathRequest(BaseModel):
+    path: str = Field(..., min_length=1, description="Path to open with native OS handler")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# API Endpoints
+# Core API Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
@@ -82,6 +197,9 @@ def get_health() -> dict[str, Any]:
         "version": __version__,
         "projects_path": PROJECTS_PATH,
         "vault_path": VAULT_PATH,
+        "exports_path": EXPORTS_PATH,
+        "archive_path": ARCHIVE_PATH,
+        "shuttle_path": SHUTTLE_PATH,
     }
 
 
@@ -115,6 +233,8 @@ def get_projects() -> list[dict[str, Any]]:
                 "name": metadata.get("name") or cached.get("name") or proj_path.name,
                 "type": cat,
                 "client": metadata.get("client") or cached.get("client") or "None",
+                "description": metadata.get("description") or cached.get("description") or "",
+                "tags": metadata.get("tags") or cached.get("tags") or [],
                 "relative_path": rel_path,
                 "icon": get_category_icon(cat),
                 "is_stale": path_str in stale_set,
@@ -127,6 +247,8 @@ def get_projects() -> list[dict[str, Any]]:
                 "slug": metadata.get("slug") or proj_path.name,
                 "type": cat,
                 "client": metadata.get("client") or "None",
+                "description": metadata.get("description") or "",
+                "tags": metadata.get("tags") or [],
                 "path": path_str,
                 "relative_path": rel_path,
                 "created": created,
@@ -185,6 +307,402 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
             detail=f"Failed to create project: {e}",
         ) from e
 
+
+@app.put("/api/projects/{project_name}")
+def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, Any]:
+    """Update project metadata (.project_meta.json) securely."""
+    proj_path, meta = _find_project_dir(project_name)
+    meta_file = proj_path / ".project_meta.json"
+
+    if req.name is not None:
+        clean_name = sanitize_path_input(req.name, max_length=100)
+        meta["name"] = clean_name
+
+    if req.client is not None:
+        client_clean = req.client.strip()
+        if client_clean and client_clean.lower() != "none":
+            meta["client"] = validate_client_name(client_clean)
+        else:
+            meta["client"] = "None"
+
+    if req.category is not None:
+        meta["type"] = req.category.strip()
+
+    if req.description is not None:
+        meta["description"] = req.description.strip()
+
+    if req.tags is not None:
+        meta["tags"] = [str(t).strip() for t in req.tags if str(t).strip()]
+
+    if req.status is not None:
+        meta["status"] = req.status.strip()
+
+    if req.custom_meta is not None and isinstance(req.custom_meta, dict):
+        for k, v in req.custom_meta.items():
+            meta[k] = v
+
+    meta["last_updated"] = datetime.datetime.now().isoformat()
+
+    try:
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Failed to write metadata for {project_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update metadata file: {e}",
+        ) from e
+
+    return {
+        "status": "success",
+        "message": f"Project '{meta.get('name', project_name)}' metadata updated successfully",
+        "project": meta,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# File Explorer Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/fs/list")
+def list_fs(path: Optional[str] = None) -> dict[str, Any]:
+    """List directory contents with security boundary checks, folders first."""
+    if not path or path.strip() in ("", "."):
+        target_dir = Path(PROJECTS_PATH).resolve()
+    else:
+        p_str = path.strip()
+        p = Path(p_str)
+        if not p.is_absolute():
+            candidate = (Path(PROJECTS_PATH) / p).resolve()
+            if candidate.exists():
+                target_dir = candidate
+            else:
+                target_dir = (Path(ROOT_PATH) / p).resolve()
+        else:
+            target_dir = p.resolve()
+
+    target_dir = _check_path_allowed(target_dir)
+
+    if not target_dir.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Path not found: {path}")
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Path is not a directory: {path}")
+
+    entries = []
+    try:
+        with os.scandir(target_dir) as it:
+            for entry in it:
+                if entry.name.startswith(".") and entry.name != ".project_meta.json":
+                    continue
+                try:
+                    stat_res = entry.stat()
+                    is_dir = entry.is_dir(follow_symlinks=False)
+                    ext = Path(entry.name).suffix.lower() if not is_dir else ""
+                    mtime_iso = datetime.datetime.fromtimestamp(stat_res.st_mtime).isoformat()
+                    size_bytes = stat_res.st_size if not is_dir else 0
+
+                    entries.append({
+                        "name": entry.name,
+                        "path": str(Path(entry.path).resolve()),
+                        "is_dir": is_dir,
+                        "size": size_bytes,
+                        "type": "directory" if is_dir else (ext[1:] if ext else "file"),
+                        "extension": ext,
+                        "modified": mtime_iso,
+                    })
+                except (OSError, PermissionError):
+                    continue
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission denied: {e}")
+
+    # Sort folders first (alphabetical), then files (alphabetical)
+    entries.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+
+    # Determine parent path if within allowed bounds
+    parent_path = None
+    if target_dir.parent != target_dir:
+        try:
+            _check_path_allowed(target_dir.parent)
+            parent_path = str(target_dir.parent)
+        except HTTPException:
+            parent_path = None
+
+    # Calculate friendly relative path
+    rel_display = target_dir.name
+    for root in _get_allowed_roots():
+        try:
+            rel = target_dir.relative_to(root)
+            rel_display = rel.as_posix() if str(rel) != "." else root.name
+            break
+        except Exception:
+            pass
+
+    return {
+        "current_path": str(target_dir),
+        "name": target_dir.name or str(target_dir),
+        "relative_display": rel_display,
+        "parent_path": parent_path,
+        "entries": entries,
+    }
+
+
+@app.post("/api/fs/open")
+def open_fs_path(req: OpenPathRequest) -> dict[str, Any]:
+    """Open a file or directory using the OS native handler."""
+    p_str = req.path.strip()
+    p = Path(p_str)
+    if not p.is_absolute():
+        candidate = (Path(PROJECTS_PATH) / p).resolve()
+        if candidate.exists():
+            target = candidate
+        else:
+            target = (Path(ROOT_PATH) / p).resolve()
+    else:
+        target = p.resolve()
+
+    target = _check_path_allowed(target)
+
+    if not target.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Path does not exist: {req.path}")
+
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(target))
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(target)], check=False)
+        else:
+            subprocess.run(["xdg-open", str(target)], check=False)
+        return {
+            "status": "success",
+            "message": f"Opened '{target.name}' natively",
+            "path": str(target),
+        }
+    except Exception as e:
+        logger.error(f"Failed to open native handler for {target}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not open path natively: {e}",
+        ) from e
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Travel, Archive & Resurrect Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.post("/api/projects/{project_name}/travel")
+def travel_project(project_name: str) -> dict[str, Any]:
+    """Copy active project to configured Shuttle Drive."""
+    proj_path, meta = _find_project_dir(project_name)
+    shuttle_root = SHUTTLE_PATH
+    if not shuttle_root:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shuttle path is not configured in config.json",
+        )
+
+    if not os.path.exists(shuttle_root):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Shuttle Drive path not found at: {shuttle_root}. Please connect the external drive.",
+        )
+
+    try:
+        rel_path = proj_path.relative_to(Path(PROJECTS_PATH)).as_posix()
+    except Exception:
+        rel_path = proj_path.name
+
+    dest_path = Path(shuttle_root) / "Projects" / rel_path
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        shutil.copytree(proj_path, dest_path, dirs_exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_file = dest_path / "_TRAVEL_LOG.txt"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"Synced from Desktop at: {timestamp}\n")
+        return {
+            "status": "success",
+            "message": f"Project ready for travel at {dest_path}",
+            "dest_path": str(dest_path),
+            "project": meta,
+        }
+    except Exception as e:
+        logger.error(f"Error copying to shuttle: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to copy project to Shuttle: {e}",
+        ) from e
+
+
+@app.post("/api/projects/{project_name}/archive")
+def archive_project(project_name: str) -> dict[str, Any]:
+    """Move active project from Projects tree to Cold Archive."""
+    proj_path, meta = _find_project_dir(project_name)
+    archive_root = ARCHIVE_PATH
+    if not archive_root:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Archive path is not configured in config.json",
+        )
+
+    try:
+        os.makedirs(archive_root, exist_ok=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cannot access or create Archive directory: {e}",
+        ) from e
+
+    category = meta.get("type", "Video")
+    client = meta.get("client")
+    if client and client != "None":
+        dest_dir = Path(archive_root) / "Clients" / client / proj_path.name
+    else:
+        dest_dir = Path(archive_root) / category / proj_path.name
+
+    dest_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    if dest_dir.exists():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Project already exists in Archive at: {dest_dir}",
+        )
+
+    try:
+        shutil.copytree(proj_path, dest_dir)
+        if not robust_rmtree(str(proj_path)):
+            logger.warning(f"Could not cleanly remove source project {proj_path} after copy to archive.")
+
+        try:
+            refresh_storage_index()
+        except Exception:
+            pass
+
+        return {
+            "status": "success",
+            "message": f"Project '{meta.get('name', project_name)}' moved to Archive",
+            "archive_path": str(dest_dir),
+            "project": meta,
+        }
+    except Exception as e:
+        logger.error(f"Error archiving project: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Archiving failed: {e}",
+        ) from e
+
+
+@app.get("/api/projects/archived")
+def get_archived_projects() -> list[dict[str, Any]]:
+    """List all archived projects located in ARCHIVE_PATH."""
+    archive_root = ARCHIVE_PATH
+    if not archive_root or not os.path.exists(archive_root):
+        return []
+
+    discovered = discover_projects(archive_root)
+    archived_list: list[dict[str, Any]] = []
+
+    for proj_path, metadata in discovered:
+        path_str = str(proj_path)
+        cat = metadata.get("type") or "Video"
+        try:
+            rel_path = proj_path.relative_to(Path(archive_root)).as_posix()
+        except Exception:
+            rel_path = proj_path.name
+
+        created, created_source = _created_date(proj_path, metadata)
+        archived_list.append({
+            "name": metadata.get("name") or proj_path.name,
+            "slug": metadata.get("slug") or proj_path.name,
+            "type": cat,
+            "client": metadata.get("client") or "None",
+            "description": metadata.get("description") or "",
+            "path": path_str,
+            "relative_path": rel_path,
+            "created": created,
+            "created_source": created_source,
+            "icon": get_category_icon(cat),
+            "is_archived": True,
+        })
+
+    archived_list.sort(key=lambda p: p.get("created") or "", reverse=True)
+    return archived_list
+
+
+@app.post("/api/projects/{project_name}/resurrect")
+def resurrect_project(project_name: str) -> dict[str, Any]:
+    """Restore an archived project from Archive back to active Projects tree."""
+    archive_root = ARCHIVE_PATH
+    if not archive_root or not os.path.exists(archive_root):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Archive path not found at: {archive_root}",
+        )
+
+    proj_path, meta = _find_project_dir(project_name, search_root=archive_root)
+
+    category = meta.get("type", "Video")
+    client = meta.get("client")
+    if client and client != "None":
+        dest_root = Path(PROJECTS_PATH) / "Clients" / client
+    else:
+        cat_lower = category.lower()
+        if cat_lower in ["web", "code", "dev"]:
+            dest_cat = "Code"
+        elif cat_lower in ["music", "audio"]:
+            dest_cat = "Music"
+        elif cat_lower == "ai":
+            dest_cat = "AI"
+        elif cat_lower == "design":
+            dest_cat = "Design"
+        elif cat_lower == "photo":
+            dest_cat = "Photo"
+        elif cat_lower == "writing":
+            dest_cat = "Writing"
+        elif cat_lower == "podcast":
+            dest_cat = "Podcast"
+        elif cat_lower == "course":
+            dest_cat = "Course"
+        else:
+            dest_cat = "Video"
+        dest_root = Path(PROJECTS_PATH) / dest_cat
+
+    dest_root.mkdir(parents=True, exist_ok=True)
+    final_dest = dest_root / proj_path.name
+
+    if final_dest.exists():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Project already exists in Active Projects at: {final_dest}",
+        )
+
+    try:
+        shutil.copytree(proj_path, final_dest)
+        if not robust_rmtree(str(proj_path)):
+            logger.warning(f"Could not completely remove {proj_path} from archive after restoring.")
+
+        try:
+            refresh_storage_index()
+        except Exception:
+            pass
+
+        return {
+            "status": "success",
+            "message": f"Project '{meta.get('name', project_name)}' resurrected successfully to {final_dest}",
+            "path": str(final_dest),
+            "project": meta,
+        }
+    except Exception as e:
+        logger.error(f"Error resurrecting project: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Resurrection failed: {e}",
+        ) from e
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Storage & Config Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
 
 @app.get("/api/storage")
 def get_storage() -> dict[str, Any]:
@@ -256,6 +774,10 @@ def get_config_endpoint() -> dict[str, Any]:
     }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Note Sync (JSON & SSE Stream)
+# ──────────────────────────────────────────────────────────────────────────────
+
 @app.post("/api/sync")
 def trigger_sync() -> dict[str, Any]:
     """Trigger bidirectional sync between projects and Obsidian vault."""
@@ -271,6 +793,30 @@ def trigger_sync() -> dict[str, Any]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Sync failed: {e}",
         ) from e
+
+
+@app.get("/api/sync/stream")
+def sync_stream_endpoint() -> StreamingResponse:
+    """Stream real-time Server-Sent Events (SSE) for note sync operations."""
+    def sse_generator():
+        try:
+            for event_data in stream_sync():
+                payload = json.dumps(event_data)
+                yield f"data: {payload}\n\n"
+        except Exception as err:
+            logger.error(f"Error during SSE sync stream: {err}")
+            err_payload = json.dumps({"event": "error", "message": str(err)})
+            yield f"data: {err_payload}\n\n"
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

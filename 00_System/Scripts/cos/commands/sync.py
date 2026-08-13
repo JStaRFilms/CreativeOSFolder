@@ -267,6 +267,92 @@ def run_sync(
     }
 
 
+def stream_sync(
+    projects_path: str | None = None,
+    vault_path: str | None = None,
+):
+    """Generator executing bidirectional note sync and yielding SSE-ready event dictionaries."""
+    proj_root = projects_path or PROJECTS_PATH
+    vault_root = vault_path or VAULT_PATH
+    vault_projects_dir = os.path.join(vault_root, "01_Active_Projects")
+    if not os.path.exists(vault_projects_dir):
+        os.makedirs(vault_projects_dir, exist_ok=True)
+
+    yield {
+        "event": "start",
+        "message": "Initiating note synchronization with Obsidian Vault...",
+        "timestamp": datetime.datetime.now().isoformat(),
+    }
+
+    prev_sync_state = load_sync_state()
+    new_sync_state: SyncState = {}
+    all_logs: list[dict[str, Any]] = []
+    total_changes = 0
+    projects_synced = 0
+
+    for root, dirs, files in os.walk(proj_root, topdown=True):
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+
+        if ".project_meta.json" in files:
+            meta_path = os.path.join(root, ".project_meta.json")
+            try:
+                with open(meta_path, "r", encoding="utf-8-sig") as f:
+                    meta = json.load(f)
+            except Exception:
+                continue
+
+            project_name = meta.get("slug", "Unknown")
+            notes_project = os.path.join(root, "00_Notes")
+            notes_vault = os.path.join(vault_projects_dir, project_name)
+
+            yield {
+                "event": "scanning_project",
+                "project": project_name,
+                "path": root,
+            }
+
+            project_prev_state = prev_sync_state.get("projects", {}).get(project_name, {}).get("files", {})
+            logs, project_state = sync_two_folders(notes_project, notes_vault, project_prev_state)
+
+            if project_state:
+                if "projects" not in new_sync_state:
+                    new_sync_state["projects"] = {}
+                new_sync_state["projects"][project_name] = {
+                    "files": project_state,
+                    "last_sync": datetime.datetime.now().isoformat(),
+                }
+
+            projects_synced += 1
+
+            for log in logs:
+                log_entry = {
+                    "project": project_name,
+                    "type": log.get("type", "unknown"),
+                    "file": log.get("file", ""),
+                    "msg": log.get("msg", ""),
+                }
+                all_logs.append(log_entry)
+                total_changes += 1
+
+                yield {
+                    "event": "file_sync",
+                    **log_entry,
+                }
+
+    sync_timestamp = datetime.datetime.now().isoformat()
+    new_sync_state["last_full_sync"] = sync_timestamp
+    save_sync_state(new_sync_state)
+
+    logger.info(f"Sync complete: {total_changes} operations across {projects_synced} projects")
+    yield {
+        "event": "complete",
+        "projects_synced": projects_synced,
+        "total_changes": total_changes,
+        "logs": all_logs,
+        "last_sync": sync_timestamp,
+    }
+
+
 def cmd_sync(args: argparse.Namespace) -> None:
     """Sync Notes between Projects and Obsidian Vault."""
     logger.info("Starting sync operation")

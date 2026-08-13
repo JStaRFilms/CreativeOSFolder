@@ -248,8 +248,9 @@
 }
 
 .path-val {
-  font-size: 0.725rem;
-  color: var(--text-muted);
+  font-size: 0.785rem;
+  font-weight: 500;
+  color: var(--text-secondary);
   word-break: break-all;
 }
 
@@ -337,10 +338,11 @@
 /* Obsidian Sync Console */
 .log-console {
   background-color: var(--console-bg);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--console-border);
   border-radius: var(--radius-md);
   margin-top: 1rem;
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
 
 .console-top-bar {
@@ -348,8 +350,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.85rem;
-  border-bottom: 1px solid var(--border-subtle);
-  background-color: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--console-border);
+  background-color: var(--badge-bg);
 }
 
 .console-title {
@@ -368,14 +370,15 @@
 .console-body {
   padding: 0.85rem 1rem;
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--console-text);
   max-height: 240px;
   overflow-y: auto;
   line-height: 1.6;
 }
 
 .log-entry { display: flex; gap: 0.65rem; }
-.log-entry.log-push { color: #34d399; }
-.log-entry.log-pull { color: #60a5fa; }
-.log-entry.log-error { color: #f87171; }
-.log-entry.log-conflict { color: #fbbf24; }
+.log-entry.log-push { color: var(--color-success); font-weight: 600; }
+.log-entry.log-pull { color: var(--color-primary); font-weight: 600; }
+.log-entry.log-error { color: var(--color-danger); font-weight: 600; }
+.log-entry.log-conflict { color: var(--color-warning); font-weight: 600; }
+.log-entry.log-info { color: var(--text-secondary); }

@@ -17,7 +17,7 @@ export function renderProjectCard(project, maxProjectSize = 1) {
   const categoryIconSvg = getCategoryIconSvg(cat);
 
   return `
-    <div class="project-card" data-slug="${project.slug || ''}" data-category="${cat}" tabindex="0" role="button" aria-label="Inspect ${project.name}">
+    <div class="project-card" data-slug="${project.slug || ''}" data-name="${project.name || ''}" data-path="${project.path || ''}" data-category="${cat}" tabindex="0" role="button" aria-label="Inspect ${project.name}">
       <div class="card-top-row">
         <div class="card-title-lockup">
           <div class="card-icon-tag" aria-hidden="true">${categoryIconSvg}</div>

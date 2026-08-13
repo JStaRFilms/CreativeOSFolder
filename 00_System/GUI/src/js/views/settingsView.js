@@ -24,7 +24,7 @@ export async function renderSettings(container) {
       <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div>
           <h2 class="section-title">Obsidian Brain Sync</h2>
-          <p class="section-desc">Bidirectional synchronization between project <code>00_Notes/</code> and your Obsidian Vault</p>
+          <p class="section-desc">Bidirectional synchronization between project notes (<code>00_Notes/</code>) and your Obsidian Vault</p>
         </div>
         <button id="trigger-sync-btn" class="btn btn-primary">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
@@ -34,7 +34,7 @@ export async function renderSettings(container) {
 
       <div id="sync-console" class="log-console" style="display: none;">
         <div class="console-top-bar">
-          <span class="console-title">Live Vault Sync Console</span>
+          <span class="console-title font-mono">Obsidian Vault Sync Stream</span>
           <span id="sync-time-stamp" class="console-time font-mono">Ready</span>
         </div>
         <div id="sync-log-entries" class="console-body font-mono"></div>
@@ -45,7 +45,7 @@ export async function renderSettings(container) {
     <div class="settings-section">
       <div class="section-header">
         <h2 class="section-title">System Paths</h2>
-        <p class="section-desc">Configured paths resolved from <code>00_System/Config/config.json</code></p>
+        <p class="section-desc">Configured workspace paths loaded from <code>00_System/Config/config.json</code></p>
       </div>
       <div id="paths-list-container">
         <div class="loading-state" style="padding: 2rem;">
@@ -59,7 +59,7 @@ export async function renderSettings(container) {
     <div class="settings-section">
       <div class="section-header">
         <h2 class="section-title">Category Blueprints</h2>
-        <p class="section-desc">Active project scaffolds loaded from <code>00_System/Config/categories.json</code></p>
+        <p class="section-desc">Active project scaffolding templates loaded from <code>00_System/Config/categories.json</code></p>
       </div>
       <div id="categories-table-container">
         <div class="loading-state" style="padding: 2rem;">
@@ -169,7 +169,7 @@ export async function renderSettings(container) {
   const syncLogEntries = document.getElementById("sync-log-entries");
   const syncTimeStamp = document.getElementById("sync-time-stamp");
 
-  syncBtn?.addEventListener("click", async () => {
+  syncBtn?.addEventListener("click", () => {
     syncBtn.disabled = true;
     syncBtn.innerHTML = `
       <span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin: 0;"></span>
@@ -179,40 +179,56 @@ export async function renderSettings(container) {
     if (syncConsole) {
       syncConsole.style.display = "block";
       if (syncLogEntries) {
-        syncLogEntries.innerHTML = `<div class="log-entry"><span>Connecting to Obsidian Vault at 03_Vault/...</span></div>`;
+        syncLogEntries.innerHTML = `<div class="log-entry log-info"><span>[Engine]</span> <span>Connecting to /api/sync/stream...</span></div>`;
       }
     }
 
-    try {
-      const result = await api.triggerSync();
-      showToast(`Sync complete: ${result.total_changes || 0} operations across ${result.projects_synced || 0} projects`, "success");
+    let syncedChanges = 0;
+    let projectsSynced = 0;
 
-      if (syncTimeStamp) {
-        syncTimeStamp.textContent = result.last_sync ? `Synced at ${result.last_sync.substring(11, 19)}` : "Finished";
-      }
+    api.streamSync(
+      (event) => {
+        if (!syncLogEntries) return;
 
-      if (syncLogEntries) {
-        if (result.logs && result.logs.length > 0) {
-          syncLogEntries.innerHTML = result.logs.map(l => {
-            const typeClass = `log-${l.type || 'info'}`;
-            return `<div class="log-entry ${typeClass}"><span>[${l.project || 'System'}]</span> <span>${(l.type || 'SYNC').toUpperCase()}: ${l.file || ''}</span></div>`;
-          }).join("") + `<div class="log-entry log-push" style="margin-top: 0.5rem;"><span>Sync finished (${result.total_changes || 0} updates applied).</span></div>`;
-        } else {
-          syncLogEntries.innerHTML = `<div class="log-entry log-push"><span>All notes are synchronized (${result.projects_synced || 0} projects scanned).</span></div>`;
+        if (event.event === "start") {
+          syncLogEntries.innerHTML += `<div class="log-entry log-info"><span>[Engine]</span> <span>${event.message}</span></div>`;
+        } else if (event.event === "scanning_project") {
+          projectsSynced++;
+          if (syncTimeStamp) {
+            syncTimeStamp.textContent = `Scanning: ${event.project}`;
+          }
+        } else if (event.event === "file_sync") {
+          syncedChanges++;
+          const typeClass = `log-${event.type || 'info'}`;
+          syncLogEntries.innerHTML += `<div class="log-entry ${typeClass}"><span>[${event.project}]</span> <span>${(event.type || 'SYNC').toUpperCase()}: ${event.file} (${event.msg})</span></div>`;
+        } else if (event.event === "complete") {
+          if (syncTimeStamp) {
+            syncTimeStamp.textContent = event.last_sync ? `Synced at ${event.last_sync.substring(11, 19)}` : "Finished";
+          }
+          syncLogEntries.innerHTML += `<div class="log-entry log-push" style="margin-top: 0.5rem; font-weight: bold;"><span>✨ Sync complete. ${event.total_changes || syncedChanges} operations across ${event.projects_synced || projectsSynced} projects.</span></div>`;
+          showToast(`Sync complete: ${event.total_changes || 0} operations`, "success");
         }
+        syncLogEntries.scrollTop = syncLogEntries.scrollHeight;
+      },
+      (err) => {
+        showToast(`Sync failed: ${err.message}`, "error");
+        if (syncLogEntries) {
+          syncLogEntries.innerHTML += `<div class="log-entry log-error"><span>[Error]</span> <span>${err.message}</span></div>`;
+        }
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Sync With Vault
+        `;
+      },
+      (completeData) => {
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Sync With Vault
+        `;
       }
-    } catch (err) {
-      showToast(`Sync failed: ${err.message}`, "error");
-      if (syncLogEntries) {
-        syncLogEntries.innerHTML += `<div class="log-entry log-error"><span>Error: ${err.message}</span></div>`;
-      }
-    } finally {
-      syncBtn.disabled = false;
-      syncBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        Sync With Vault
-      `;
-    }
+    );
   });
 
   await loadSettingsData();
