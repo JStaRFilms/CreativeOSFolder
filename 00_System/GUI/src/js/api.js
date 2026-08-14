@@ -251,6 +251,46 @@ export const api = {
   },
 
   /**
+   * Real-time Server-Sent Events (SSE) Reclaim Stream
+   */
+  streamReclaim: ({ project = null, targets = null, slugs = null, stale_only = false, days = 90 } = {}, onEvent, onError, onComplete) => {
+    const params = new URLSearchParams();
+    if (project) params.set("project", project);
+    if (targets && Array.isArray(targets)) params.set("targets", targets.join(","));
+    if (slugs && Array.isArray(slugs)) params.set("slugs", slugs.join(","));
+    if (stale_only) params.set("stale_only", "true");
+    if (days) params.set("days", String(days));
+
+    const url = `${API_BASE}/storage/reclaim/stream?${params.toString()}`;
+    const eventSource = new EventSource(url);
+
+    eventSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.event === "error") {
+          eventSource.close();
+          if (onError) onError(new Error(data.message || "Reclaim failed"));
+        } else if (data.event === "complete") {
+          eventSource.close();
+          cacheStore.invalidate("storage");
+          if (onComplete) onComplete(data);
+        } else {
+          if (onEvent) onEvent(data);
+        }
+      } catch (err) {
+        console.error("[Reclaim SSE Parse Error]", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      eventSource.close();
+      if (onError) onError(err);
+    };
+
+    return eventSource;
+  },
+
+  /**
    * Real-time Server-Sent Events (SSE) Sync Stream
    */
   streamSync: (onEvent, onError, onComplete) => {

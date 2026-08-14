@@ -58,6 +58,7 @@ function renderMarkdownSafe(rawText) {
 
 export async function renderExplorer(container, initialPath = "") {
   let showPreview = localStorage.getItem("cos_explorer_preview_pane") !== "false";
+  let isInspectorWide = localStorage.getItem("cos_explorer_inspector_wide") === "true";
   let viewMode = localStorage.getItem("cos_explorer_view_mode") || "list";
   let sortField = localStorage.getItem("cos_explorer_sort_field") || "name";
   let sortDir = localStorage.getItem("cos_explorer_sort_dir") || "asc";
@@ -65,6 +66,23 @@ export async function renderExplorer(container, initialPath = "") {
   let currentParentPath = null;
   let currentEntries = [];
   let selectedItem = null;
+
+  let knownTemplateFolders = new Set([
+    "00_Notes", "01_Footage", "01_RAW", "02_Audio", "03_Assets", "03_Exports", 
+    "04_Exports", "04_Design", "05_Cut_v1", "06_Cut_v2", "src", "scripts", "docs", "concepts"
+  ]);
+
+  try {
+    const catMap = await api.getCategories();
+    if (catMap) {
+      Object.values(catMap).forEach(cat => {
+        (cat.folder_structure || []).forEach(f => knownTemplateFolders.add(f));
+        if (cat.template_structure) {
+          Object.keys(cat.template_structure).forEach(f => knownTemplateFolders.add(f));
+        }
+      });
+    }
+  } catch {}
 
   container.innerHTML = `
     <div class="page-header">
@@ -134,7 +152,7 @@ export async function renderExplorer(container, initialPath = "") {
     </div>
 
     <!-- Unified Explorer Studio Shell -->
-    <div class="explorer-studio-shell ${showPreview ? 'has-inspector' : ''}" id="explorer-main-shell">
+    <div class="explorer-studio-shell ${showPreview ? 'has-inspector' : ''} ${isInspectorWide ? 'inspector-is-wide' : ''}" id="explorer-main-shell">
       <!-- Left: Files Pane -->
       <div class="explorer-files-pane" id="explorer-files-pane">
         <div class="explorer-files-scroll" id="explorer-content-area" style="min-height: 360px;">
@@ -337,6 +355,13 @@ export async function renderExplorer(container, initialPath = "") {
             const sizeStr = entry.is_dir ? "Folder" : formatBytes(entry.size);
             const modDate = entry.modified ? entry.modified.substring(0, 10) : "";
             const isSel = selectedItem && selectedItem.path === entry.path;
+            const isBp = entry.is_dir ? knownTemplateFolders.has(entry.name) : false;
+            const folderTag = entry.is_dir ? `
+              <span class="grid-folder-badge" title="${isBp ? 'Standard Template Folder' : 'User Created Folder'}">
+                <span class="folder-origin-dot ${entry.name === '00_Notes' ? 'dot-obsidian' : (isBp ? 'dot-template' : 'dot-custom')}"></span>
+                <span>${entry.name === '00_Notes' ? 'Vault' : (isBp ? 'Template' : 'Custom')}</span>
+              </span>
+            ` : '';
 
             return `
               <div class="explorer-card ${entry.is_dir ? 'is-folder' : 'is-file'} ${isSel ? 'is-selected' : ''}" data-path="${entry.path}" data-isdir="${entry.is_dir}" tabindex="0" role="button">
@@ -345,8 +370,9 @@ export async function renderExplorer(container, initialPath = "") {
                 </div>
                 <div class="explorer-card-info">
                   <span class="explorer-card-name font-mono" title="${entry.name}">${entry.name}</span>
-                  <div class="explorer-card-meta font-mono">
+                  <div class="explorer-card-meta font-mono" style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
                     <span>${sizeStr}</span>
+                    ${folderTag}
                     <span>${modDate}</span>
                   </div>
                 </div>
@@ -396,7 +422,27 @@ export async function renderExplorer(container, initialPath = "") {
               const iconSvg = getFileIconSvg(entry.extension, entry.is_dir);
               const sizeStr = entry.is_dir ? "—" : formatBytes(entry.size);
               const modDate = entry.modified ? entry.modified.substring(0, 19).replace('T', ' ') : "—";
-              const typeLabel = entry.is_dir ? "Folder" : (entry.type ? entry.type.toUpperCase() : "File");
+              let typeLabel = "";
+              if (entry.is_dir) {
+                const isBp = knownTemplateFolders.has(entry.name);
+                if (entry.name === "00_Notes") {
+                  typeLabel = `
+                    <div class="folder-type-pill" title="Obsidian Vault Sync Folder">
+                      <span class="folder-origin-dot dot-obsidian"></span>
+                      <span>Vault</span>
+                    </div>
+                  `;
+                } else {
+                  typeLabel = `
+                    <div class="folder-type-pill" title="${isBp ? 'Standard Template Folder' : 'User Created Folder'}">
+                      <span class="folder-origin-dot ${isBp ? 'dot-template' : 'dot-custom'}"></span>
+                      <span>Folder</span>
+                    </div>
+                  `;
+                }
+              } else {
+                typeLabel = `<span class="font-mono" style="color: var(--text-muted); font-size: 0.785rem;">${entry.type ? entry.type.toUpperCase() : "FILE"}</span>`;
+              }
               const isSel = selectedItem && selectedItem.path === entry.path;
 
               return `
@@ -407,7 +453,7 @@ export async function renderExplorer(container, initialPath = "") {
                       <span class="table-title font-mono" title="${entry.name}">${entry.name}</span>
                     </div>
                   </td>
-                  <td class="col-type font-mono" style="color: var(--text-muted); font-size: 0.785rem;">${typeLabel}</td>
+                  <td class="col-type font-mono">${typeLabel}</td>
                   <td class="col-size font-mono font-bold" style="font-size: 0.785rem;">${sizeStr}</td>
                   <td class="col-date font-mono" style="color: var(--text-muted); font-size: 0.785rem;">${modDate}</td>
                 </tr>
@@ -597,10 +643,37 @@ export async function renderExplorer(container, initialPath = "") {
       )
     );
 
+    const isBp = isDir ? knownTemplateFolders.has(item.name) : false;
+    let badgesHtml = "";
+    if (isDir) {
+      badgesHtml = `
+        <span class="inspector-tag font-mono ${isBp ? 'tag-template' : 'tag-custom'}">
+          ${isBp ? 'Standard Template' : 'User Created (Custom)'}
+        </span>
+        ${item.name === '00_Notes' ? '<span class="inspector-tag font-mono tag-obsidian">Obsidian Vault</span>' : ''}
+        <span class="inspector-tag font-mono font-bold">Directory</span>
+      `;
+    } else {
+      badgesHtml = `
+        <span class="inspector-tag font-mono">${typeDesc}</span>
+        <span class="inspector-tag font-mono font-bold">${formatBytes(item.size)}</span>
+      `;
+    }
+
     inspectorPaneEl.innerHTML = `
       <div class="inspector-header">
         <span class="inspector-eyebrow">INSPECTOR</span>
         <div class="inspector-header-actions">
+          <button class="inspector-icon-btn ${isInspectorWide ? 'active' : ''}" id="inspector-expand-btn" title="${isInspectorWide ? 'Compact Inspector (380px)' : 'Expand to Wide Inspector (50% Split)'}">
+            ${isInspectorWide ? `
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6m0 0v6m0-6L3 21m17-7h-6m0 0v6m0-6l7 7M10 4v6m0 0H4m6 0L3 3m10 7h6m0 0V4m0 6l7-7"/></svg>
+            ` : `
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            `}
+          </button>
+          <button class="inspector-icon-btn" id="inspector-fullscreen-btn" title="Fullscreen QuickLook (Space)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
           <button class="inspector-icon-btn" id="inspector-open-btn" title="Open in OS Default App">
             ${icons.externalLink}
           </button>
@@ -619,8 +692,7 @@ export async function renderExplorer(container, initialPath = "") {
         <div class="inspector-identity">
           <div class="inspector-file-name font-mono">${escapeHtml(item.name)}</div>
           <div class="inspector-badges-row">
-            <span class="inspector-tag font-mono">${typeDesc}</span>
-            <span class="inspector-tag font-mono font-bold">${isDir ? 'Directory' : formatBytes(item.size)}</span>
+            ${badgesHtml}
           </div>
         </div>
 
@@ -630,6 +702,18 @@ export async function renderExplorer(container, initialPath = "") {
             <span class="inspector-prop-key">Dimensions</span>
             <span class="inspector-prop-val" id="inspector-dimensions-val">—</span>
           </div>
+          ${isDir ? `
+            <div class="inspector-prop-row font-mono">
+              <span class="inspector-prop-key">Origin</span>
+              <span class="inspector-prop-val">${isBp ? 'Template Default' : 'User Added (Custom)'}</span>
+            </div>
+            ${item.name === '00_Notes' ? `
+              <div class="inspector-prop-row font-mono">
+                <span class="inspector-prop-key">Sync</span>
+                <span class="inspector-prop-val" style="color: var(--color-success);">Obsidian Vault</span>
+              </div>
+            ` : ''}
+          ` : ''}
           <div class="inspector-prop-row font-mono">
             <span class="inspector-prop-key">Modified</span>
             <span class="inspector-prop-val">${item.modified ? item.modified.substring(0, 19).replace('T', ' ') : '—'}</span>
@@ -644,6 +728,21 @@ export async function renderExplorer(container, initialPath = "") {
 
     // Wire Pane Buttons
     document.getElementById("inspector-close-btn")?.addEventListener("click", togglePreview);
+
+    document.getElementById("inspector-expand-btn")?.addEventListener("click", () => {
+      isInspectorWide = !isInspectorWide;
+      localStorage.setItem("cos_explorer_inspector_wide", isInspectorWide ? "true" : "false");
+      if (isInspectorWide) {
+        mainShellEl?.classList.add("inspector-is-wide");
+      } else {
+        mainShellEl?.classList.remove("inspector-is-wide");
+      }
+      renderInspector(item);
+    });
+
+    document.getElementById("inspector-fullscreen-btn")?.addEventListener("click", () => {
+      openQuickLookModal(item);
+    });
 
     document.getElementById("inspector-open-btn")?.addEventListener("click", () => {
       openItemNatively(item.path);
@@ -721,6 +820,286 @@ export async function renderExplorer(container, initialPath = "") {
     }
   }
 
+  let activeQuickLookModal = null;
+
+  async function openQuickLookModal(initialItem) {
+    if (!initialItem) return;
+    let currentItem = initialItem;
+
+    function getFilteredList() {
+      const query = (searchInput?.value || "").toLowerCase().trim();
+      return sortEntries(currentEntries.filter(e => {
+        if (!query) return true;
+        return e.name.toLowerCase().includes(query) || (e.type && e.type.toLowerCase().includes(query));
+      }));
+    }
+
+    const modalId = "cos-quicklook-overlay";
+    let modalEl = document.getElementById(modalId);
+    if (!modalEl) {
+      modalEl = document.createElement("div");
+      modalEl.id = modalId;
+      modalEl.className = "quicklook-backdrop";
+      document.body.appendChild(modalEl);
+    }
+    activeQuickLookModal = modalEl;
+
+    async function renderQuickLook() {
+      const list = getFilteredList();
+      const currentIndex = list.findIndex(e => e.path === currentItem.path);
+      const totalCount = list.length;
+      const hasPrev = currentIndex > 0;
+      const hasNext = currentIndex >= 0 && currentIndex < totalCount - 1;
+
+      const ext = (currentItem.extension || "").toLowerCase();
+      const isDir = currentItem.is_dir;
+      const rawUrl = api.getRawFileUrl(currentItem.path);
+
+      const isVideo = [".mp4", ".webm", ".mov", ".m4v", ".mkv"].includes(ext);
+      const isAudio = [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"].includes(ext);
+      const isImage = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".bmp", ".ico"].includes(ext);
+      const isDoc = [".md", ".markdown", ".txt", ".json", ".csv", ".log", ".py", ".js", ".css", ".html", ".yaml", ".yml", ".ts", ".jsx", ".tsx", ".sh", ".bat", ".toml", ".ini"].includes(ext);
+
+      const isBp = isDir ? knownTemplateFolders.has(currentItem.name) : false;
+      const typeDesc = isDir ? "Folder" : (
+        isVideo ? "Video" : (
+          isAudio ? "Audio" : (
+            isImage ? `${ext.replace('.', '').toUpperCase()} Image` : (
+              ext === ".md" ? "Markdown" : (
+                ext === ".json" ? "JSON" : `${ext.replace('.', '').toUpperCase() || 'Binary'}`
+              )
+            )
+          )
+        )
+      );
+
+      let bodyHtml = "";
+
+      if (isDir) {
+        bodyHtml = `
+          <div class="quicklook-media-container">
+            <div class="quicklook-audio-card">
+              <span style="font-size: 3.5rem; color: var(--color-primary);">${icons.folder}</span>
+              <div style="text-align: center;">
+                <h3 style="margin-bottom: 0.25rem; font-size: 1.25rem;">${escapeHtml(currentItem.name)}</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">Workspace Folder</p>
+                <span class="inspector-tag font-mono ${isBp ? 'tag-template' : 'tag-custom'}" style="margin-top: 0.75rem; display: inline-block; font-size: 0.75rem; padding: 0.2rem 0.55rem;">
+                  ${isBp ? 'Standard Template Folder' : 'User Created (Custom)'}
+                </span>
+                ${currentItem.name === '00_Notes' ? '<span class="inspector-tag font-mono tag-obsidian" style="margin-top: 0.75rem; margin-left: 0.4rem; display: inline-block; font-size: 0.75rem; padding: 0.2rem 0.55rem;">Obsidian Vault</span>' : ''}
+              </div>
+              <button class="btn btn-primary" id="ql-enter-folder-btn" style="margin-top: 0.5rem;">
+                ${icons.folderOpen}
+                <span>Enter Folder</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (isVideo) {
+        bodyHtml = `
+          <div class="quicklook-media-container">
+            <video controls autoplay playsinline class="quicklook-video-element" id="ql-video-tag" src="${rawUrl}">
+              Your browser does not support video playback.
+            </video>
+          </div>
+        `;
+      } else if (isAudio) {
+        bodyHtml = `
+          <div class="quicklook-media-container">
+            <div class="quicklook-audio-card">
+              <div class="preview-audio-icon" style="width: 60px; height: 60px; font-size: 1.5rem;">${icons.audio}</div>
+              <div style="text-align: center;">
+                <h3 style="margin-bottom: 0.25rem; font-size: 1.15rem;">${escapeHtml(currentItem.name)}</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">${formatBytes(currentItem.size)}</p>
+              </div>
+              <audio controls autoplay class="preview-audio-element" style="width: 340px;" src="${rawUrl}"></audio>
+            </div>
+          </div>
+        `;
+      } else if (isImage) {
+        bodyHtml = `
+          <div class="quicklook-media-container">
+            <img class="quicklook-image-element" id="ql-img-tag" src="${rawUrl}" alt="${escapeHtml(currentItem.name)}" />
+          </div>
+        `;
+      } else if (isDoc) {
+        bodyHtml = `
+          <div class="quicklook-doc-container" id="ql-doc-container">
+            <div class="quicklook-doc-content" id="ql-doc-content">
+              <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); justify-content: center; padding: 5rem 0;">
+                <div class="spinner" style="width: 20px; height: 20px; border-width: 2px;"></div>
+                <span>Loading full document...</span>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        bodyHtml = `
+          <div class="quicklook-media-container">
+            <div class="quicklook-audio-card">
+              <span style="font-size: 3.5rem; color: var(--color-primary);">${getFileIconSvg(currentItem.extension, false)}</span>
+              <div style="text-align: center;">
+                <h3 style="margin-bottom: 0.25rem; font-size: 1.15rem;">${escapeHtml(currentItem.name)}</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">Binary Asset (${formatBytes(currentItem.size)})</p>
+              </div>
+              <button class="btn btn-primary" id="ql-open-binary-btn">
+                ${icons.externalLink}
+                <span>Open in Default App</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      modalEl.innerHTML = `
+        <div class="quicklook-dialog" role="dialog" aria-modal="true" aria-label="QuickLook Preview">
+          <div class="quicklook-header">
+            <div class="quicklook-title-group">
+              <span style="display: inline-flex; color: var(--color-primary);">${getFileIconSvg(currentItem.extension, isDir)}</span>
+              <span class="quicklook-title font-mono" title="${escapeHtml(currentItem.name)}">${escapeHtml(currentItem.name)}</span>
+              <span class="inspector-tag font-mono">${typeDesc}</span>
+              ${!isDir ? `<span class="inspector-tag font-mono font-bold">${formatBytes(currentItem.size)}</span>` : ''}
+              ${isDir ? `<span class="inspector-tag font-mono ${isBp ? 'tag-template' : 'tag-custom'}">${isBp ? 'Template' : 'Custom'}</span>` : ''}
+              ${currentItem.name === '00_Notes' ? `<span class="inspector-tag font-mono tag-obsidian">Obsidian Vault</span>` : ''}
+            </div>
+
+            <div class="quicklook-actions">
+              <button class="quicklook-nav-btn" id="ql-prev-btn" ${hasPrev ? '' : 'disabled'} title="Previous File (Left Arrow / Up Arrow)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <span class="quicklook-index-badge font-mono">${currentIndex >= 0 ? `${currentIndex + 1} / ${totalCount}` : ''}</span>
+              <button class="quicklook-nav-btn" id="ql-next-btn" ${hasNext ? '' : 'disabled'} title="Next File (Right Arrow / Down Arrow)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+
+              <button class="btn btn-secondary" id="ql-copy-path-btn" style="padding: 0.3rem 0.55rem; font-size: 0.75rem;" title="Copy Full Path">
+                ${icons.copy}
+                <span>Path</span>
+              </button>
+              <button class="btn btn-secondary" id="ql-open-os-btn" style="padding: 0.3rem 0.55rem; font-size: 0.75rem;" title="Open in System Default App">
+                ${icons.externalLink}
+                <span>Open in OS</span>
+              </button>
+              <button class="modal-close-btn" id="ql-close-btn" aria-label="Close Preview (Esc)">
+                ${icons.x}
+              </button>
+            </div>
+          </div>
+
+          <div class="quicklook-body">
+            ${bodyHtml}
+          </div>
+        </div>
+      `;
+
+      // Wire QuickLook handlers
+      document.getElementById("ql-close-btn")?.addEventListener("click", closeQuickLook);
+      modalEl.addEventListener("click", (e) => {
+        if (e.target === modalEl) closeQuickLook();
+      });
+
+      document.getElementById("ql-prev-btn")?.addEventListener("click", () => {
+        if (hasPrev) {
+          currentItem = list[currentIndex - 1];
+          selectItem(currentItem);
+          renderQuickLook();
+        }
+      });
+
+      document.getElementById("ql-next-btn")?.addEventListener("click", () => {
+        if (hasNext) {
+          currentItem = list[currentIndex + 1];
+          selectItem(currentItem);
+          renderQuickLook();
+        }
+      });
+
+      document.getElementById("ql-copy-path-btn")?.addEventListener("click", () => {
+        navigator.clipboard.writeText(currentItem.path).then(() => {
+          showToast("Path copied to clipboard", "success", 1500);
+        });
+      });
+
+      document.getElementById("ql-open-os-btn")?.addEventListener("click", () => {
+        openItemNatively(currentItem.path);
+      });
+
+      document.getElementById("ql-enter-folder-btn")?.addEventListener("click", () => {
+        closeQuickLook();
+        loadDirectory(currentItem.path);
+      });
+
+      document.getElementById("ql-open-binary-btn")?.addEventListener("click", () => {
+        openItemNatively(currentItem.path);
+      });
+
+      // Async fetch doc in QuickLook
+      if (isDoc) {
+        const docContentEl = document.getElementById("ql-doc-content");
+        try {
+          const fileData = await api.getFileContent(currentItem.path, 1000000);
+          if (docContentEl) {
+            if (ext === ".md" || ext === ".markdown") {
+              docContentEl.innerHTML = renderMarkdownSafe(fileData.content);
+            } else {
+              docContentEl.innerHTML = `<pre class="font-mono" style="margin: 0; font-size: 0.825rem; line-height: 1.6;"><code>${escapeHtml(fileData.content)}</code></pre>`;
+            }
+          }
+        } catch {
+          try {
+            const rawRes = await fetch(api.getRawFileUrl(currentItem.path));
+            if (rawRes.ok && docContentEl) {
+              const rawText = await rawRes.text();
+              if (ext === ".md" || ext === ".markdown") {
+                docContentEl.innerHTML = renderMarkdownSafe(rawText);
+              } else {
+                docContentEl.innerHTML = `<pre class="font-mono" style="margin: 0; font-size: 0.825rem; line-height: 1.6;"><code>${escapeHtml(rawText)}</code></pre>`;
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+
+    function onQuickLookKeyDown(e) {
+      if (!activeQuickLookModal) return;
+      if (e.key === "Escape" || (e.key === " " && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA")) {
+        e.preventDefault();
+        closeQuickLook();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const list = getFilteredList();
+        const currentIndex = list.findIndex(e => e.path === currentItem.path);
+        if (currentIndex > 0) {
+          currentItem = list[currentIndex - 1];
+          selectItem(currentItem);
+          renderQuickLook();
+        }
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const list = getFilteredList();
+        const currentIndex = list.findIndex(e => e.path === currentItem.path);
+        if (currentIndex >= 0 && currentIndex < list.length - 1) {
+          currentItem = list[currentIndex + 1];
+          selectItem(currentItem);
+          renderQuickLook();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onQuickLookKeyDown);
+
+    function closeQuickLook() {
+      window.removeEventListener("keydown", onQuickLookKeyDown);
+      if (modalEl && modalEl.parentNode) {
+        modalEl.parentNode.removeChild(modalEl);
+      }
+      activeQuickLookModal = null;
+    }
+
+    await renderQuickLook();
+  }
+
   function togglePreview() {
     showPreview = !showPreview;
     localStorage.setItem("cos_explorer_preview_pane", showPreview ? "true" : "false");
@@ -738,6 +1117,23 @@ export async function renderExplorer(container, initialPath = "") {
       togglePreviewBtn?.classList.remove("active");
     }
   }
+
+  // Global Keyboard Shortcuts (Space for QuickLook Theater)
+  window.addEventListener("keydown", (e) => {
+    if (activeQuickLookModal) return; // Handled by modal
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+    if (e.key === " ") {
+      e.preventDefault();
+      if (selectedItem) {
+        openQuickLookModal(selectedItem);
+      } else if (currentEntries.length > 0) {
+        selectItem(currentEntries[0]);
+        openQuickLookModal(currentEntries[0]);
+      }
+    }
+  });
 
   // Toolbar Handlers
   togglePreviewBtn?.addEventListener("click", togglePreview);

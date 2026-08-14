@@ -144,11 +144,13 @@ def inspect_project(
     file_count = 0
     meaningful_latest: float | None = None
     unreadable_files = 0
+    reclaimable_items_map: dict[str, dict[str, Any]] = {}
 
-    stack: list[tuple[Path, bool, bool]] = [(project, False, False)]
+    # Stack for directory traversal: (current_dir, in_reclaimable, in_excluded, reclaim_key)
+    stack: list[tuple[Path, bool, bool, str | None]] = [(project, False, False, None)]
 
     while stack:
-        current_dir, in_reclaimable, in_excluded = stack.pop()
+        current_dir, in_reclaimable, in_excluded, reclaim_key = stack.pop()
         try:
             with os.scandir(current_dir) as it:
                 for entry in it:
@@ -166,9 +168,28 @@ def inspect_project(
                             except Exception:
                                 pass
 
-                            child_reclaimable = in_reclaimable or (name in REGENERABLE_DIRS)
+                            is_rec_root = (name in REGENERABLE_DIRS) and not in_reclaimable
+                            child_reclaimable = in_reclaimable or is_rec_root
                             child_excluded = in_excluded or (name in EXCLUDED_DIRS)
-                            stack.append((Path(entry.path), child_reclaimable, child_excluded))
+
+                            if is_rec_root:
+                                child_reclaim_key = entry.path
+                                try:
+                                    rel_p = Path(entry.path).relative_to(project).as_posix()
+                                except Exception:
+                                    rel_p = name
+                                reclaimable_items_map[child_reclaim_key] = {
+                                    "name": name,
+                                    "relative_path": rel_p,
+                                    "path": entry.path,
+                                    "size": 0,
+                                    "file_count": 0,
+                                    "description": REGENERABLE_DESCRIPTIONS.get(name, "Regenerable Cache / Dependency Folder"),
+                                }
+                            else:
+                                child_reclaim_key = reclaim_key
+
+                            stack.append((Path(entry.path), child_reclaimable, child_excluded, child_reclaim_key))
 
                         elif entry.is_file(follow_symlinks=False):
                             stat_res = entry.stat(follow_symlinks=False)
@@ -180,6 +201,9 @@ def inspect_project(
 
                             if in_reclaimable:
                                 reclaimable_size += size
+                                if reclaim_key and reclaim_key in reclaimable_items_map:
+                                    reclaimable_items_map[reclaim_key]["size"] += size
+                                    reclaimable_items_map[reclaim_key]["file_count"] += 1
                             else:
                                 _, ext = os.path.splitext(name)
                                 if ext.lower() in MEDIA_EXTENSIONS:
@@ -200,6 +224,9 @@ def inspect_project(
     if meaningful_latest is None and project_stat is not None:
         meaningful_latest = project_stat.st_mtime
 
+    reclaimable_items = list(reclaimable_items_map.values())
+    reclaimable_items.sort(key=lambda x: x["size"], reverse=True)
+
     created, created_source = _created_date(project, metadata)
     return {
         "name": metadata.get("name") or project.name,
@@ -214,6 +241,7 @@ def inspect_project(
         "media_size": media_size,
         "file_count": file_count,
         "unreadable_files": unreadable_files,
+        "reclaimable_items": reclaimable_items,
     }
 
 
@@ -270,21 +298,37 @@ def build_storage_index(projects_path: str | Path | None = None) -> dict[str, An
     }
 
 
+_IN_MEMORY_INDEX_CACHE: tuple[str, float, dict[str, Any]] | None = None
+
+
 def load_storage_index(
     index_path: str | Path | None = None,
     projects_path: str | Path | None = None,
 ) -> dict[str, Any] | None:
     """Load the prior inventory, returning ``None`` if it is absent, invalid, or mismatched."""
+    global _IN_MEMORY_INDEX_CACHE
     path = Path(index_path or STORAGE_INDEX_PATH)
+    path_str = str(path.resolve())
+
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        mtime = path.stat().st_mtime
+    except OSError:
         return None
+
+    if _IN_MEMORY_INDEX_CACHE and _IN_MEMORY_INDEX_CACHE[0] == path_str and _IN_MEMORY_INDEX_CACHE[1] == mtime:
+        loaded = _IN_MEMORY_INDEX_CACHE[2]
+    else:
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            _IN_MEMORY_INDEX_CACHE = (path_str, mtime, loaded)
+        except (OSError, json.JSONDecodeError):
+            return None
+
     if not isinstance(loaded, dict) or loaded.get("version") != INDEX_VERSION:
         return None
     if not isinstance(loaded.get("projects"), list):
         return None
-    
+
     # Only validate projects_path match if caller explicitly provided projects_path,
     # or if using the default global storage index.
     if index_path is None or projects_path is not None:
@@ -300,10 +344,9 @@ def load_storage_index(
     return loaded
 
 
-
-
 def save_storage_index(index: dict[str, Any], index_path: str | Path | None = None) -> Path:
     """Atomically persist the inventory so normal commands never read a partial scan."""
+    global _IN_MEMORY_INDEX_CACHE
     path = Path(index_path or STORAGE_INDEX_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -312,6 +355,10 @@ def save_storage_index(index: dict[str, Any], index_path: str | Path | None = No
             json.dump(index, handle, indent=2, sort_keys=True)
             handle.write("\n")
         os.replace(temporary_name, path)
+        try:
+            _IN_MEMORY_INDEX_CACHE = (str(path.resolve()), path.stat().st_mtime, index)
+        except Exception:
+            _IN_MEMORY_INDEX_CACHE = None
     except Exception:
         try:
             os.unlink(temporary_name)
@@ -337,12 +384,30 @@ def refresh_storage_index(
 
 
 def _recalculate_totals(index: dict[str, Any]) -> None:
-    """Recompute aggregate fields from the project list."""
+    """Recompute aggregate fields from the project list and self-heal any item/size discrepancies."""
     projects = index.get("projects", [])
+    total_size = 0
+    reclaimable_size = 0
+    media_size = 0
+
+    for p in projects:
+        # Self-healing: if reclaimable_items is explicitly defined, reclaimable_size must match its sum
+        items = p.get("reclaimable_items")
+        if items is not None:
+            calc_rec = sum(it.get("size", 0) for it in items)
+            if p.get("reclaimable_size") != calc_rec:
+                diff = p.get("reclaimable_size", 0) - calc_rec
+                p["reclaimable_size"] = calc_rec
+                p["total_size"] = max(0, p.get("total_size", 0) - diff)
+
+        total_size += p.get("total_size", 0)
+        reclaimable_size += p.get("reclaimable_size", 0)
+        media_size += p.get("media_size", 0)
+
     index["project_count"] = len(projects)
-    index["total_size"] = sum(p.get("total_size", 0) for p in projects)
-    index["reclaimable_size"] = sum(p.get("reclaimable_size", 0) for p in projects)
-    index["media_size"] = sum(p.get("media_size", 0) for p in projects)
+    index["total_size"] = total_size
+    index["reclaimable_size"] = reclaimable_size
+    index["media_size"] = media_size
 
 
 def update_project_in_storage_index(
@@ -510,52 +575,99 @@ def mark_reminded(index: dict[str, Any], index_path: str | Path | None = None) -
     save_storage_index(index, index_path)
 
 
-def find_project_reclaimable_dirs(project_path: str | Path) -> list[dict[str, Any]]:
-    """Scan a project and return a detailed list of all regenerable directories found."""
+def find_project_reclaimable_dirs(
+    project_path: str | Path,
+    use_cached: bool = True,
+    projects_path: str | Path | None = None,
+    index_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Scan a project and return a detailed list of all regenerable directories found.
+
+    When use_cached is True (default), instantly returns precomputed items from the
+    in-memory storage index if verified on disk.
+    """
     p_root = Path(project_path).resolve()
     if not p_root.is_dir():
         return []
 
-    items: list[dict[str, Any]] = []
+    # 1. Fast precomputed index lookup
+    if use_cached:
+        index = load_storage_index(index_path=index_path, projects_path=projects_path)
+        if index:
+            proj_str = str(p_root).lower().replace("/", "\\")
+            for p in index.get("projects", []):
+                p_path_str = str(Path(p.get("path", "")).resolve()).lower().replace("/", "\\")
+                if p_path_str == proj_str:
+                    cached_items = p.get("reclaimable_items")
+                    if cached_items:
+                        verified = [item for item in cached_items if Path(item.get("path", "")).is_dir()]
+                        if verified:
+                            return verified
+                    break
 
-    for root, dirs, _ in os.walk(p_root, topdown=True, followlinks=False):
-        curr = Path(root)
-        dirs_to_check = list(dirs)
-        for d in dirs_to_check:
-            if d in REGENERABLE_DIRS:
-                dir_path = curr / d
-                d_size = 0
-                d_files = 0
-                try:
-                    for sub_root, _, sub_files in os.walk(dir_path, followlinks=False):
-                        for f in sub_files:
-                            f_path = Path(sub_root) / f
+    items: list[dict[str, Any]] = []
+    stack = [p_root]
+
+    while stack:
+        curr = stack.pop()
+        try:
+            with os.scandir(curr) as it:
+                for entry in it:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            name = entry.name
+                            if name in VCS_DIRS:
+                                continue
                             try:
-                                if not f_path.is_symlink():
-                                    d_size += f_path.stat(follow_symlinks=False).st_size
-                                    d_files += 1
+                                if Path(entry.path).is_junction():
+                                    continue
                             except Exception:
                                 pass
-                except Exception:
-                    pass
 
-                try:
-                    rel_to_proj = dir_path.relative_to(p_root).as_posix()
-                except Exception:
-                    rel_to_proj = d
+                            if name in REGENERABLE_DIRS:
+                                d_size = 0
+                                d_files = 0
+                                sub_stack = [Path(entry.path)]
+                                while sub_stack:
+                                    sub_dir = sub_stack.pop()
+                                    try:
+                                        with os.scandir(sub_dir) as sub_it:
+                                            for sub_e in sub_it:
+                                                try:
+                                                    if sub_e.is_symlink():
+                                                        continue
+                                                    if sub_e.is_dir(follow_symlinks=False):
+                                                        sub_stack.append(Path(sub_e.path))
+                                                    elif sub_e.is_file(follow_symlinks=False):
+                                                        d_files += 1
+                                                        d_size += sub_e.stat(follow_symlinks=False).st_size
+                                                except (OSError, PermissionError):
+                                                    pass
+                                    except (OSError, PermissionError):
+                                        pass
 
-                desc = REGENERABLE_DESCRIPTIONS.get(d, "Regenerable Cache / Dependency Folder")
-                items.append({
-                    "name": d,
-                    "relative_path": rel_to_proj,
-                    "path": str(dir_path),
-                    "size": d_size,
-                    "file_count": d_files,
-                    "description": desc,
-                })
-                # Don't descend into child folders of a regenerable directory
-                if d in dirs:
-                    dirs.remove(d)
+                                try:
+                                    rel_to_proj = Path(entry.path).relative_to(p_root).as_posix()
+                                except Exception:
+                                    rel_to_proj = name
+
+                                desc = REGENERABLE_DESCRIPTIONS.get(name, "Regenerable Cache / Dependency Folder")
+                                items.append({
+                                    "name": name,
+                                    "relative_path": rel_to_proj,
+                                    "path": str(entry.path),
+                                    "size": d_size,
+                                    "file_count": d_files,
+                                    "description": desc,
+                                })
+                            else:
+                                stack.append(Path(entry.path))
+                    except (OSError, PermissionError):
+                        continue
+        except (OSError, PermissionError):
+            continue
 
     items.sort(key=lambda x: x["size"], reverse=True)
     return items
@@ -589,7 +701,6 @@ def reclaim_project_space(
 
     for item in selected:
         d_path = Path(item["path"])
-        # Safety verification: ensure directory is strictly inside project root and name is in REGENERABLE_DIRS
         if not d_path.resolve().is_relative_to(p_root):
             continue
         if d_path.name not in REGENERABLE_DIRS:
@@ -605,19 +716,115 @@ def reclaim_project_space(
             else:
                 errors.append(f"Could not remove {item['relative_path']}")
 
-    # Rescan this project and update storage index
-    try:
-        refresh_partial(p_root, projects_path=projects_path, index_path=index_path)
-    except Exception:
-        pass
+    # Directly update index in memory for instant responsiveness
+    root = Path(projects_path or PROJECTS_PATH).resolve()
+    index = load_storage_index(index_path=index_path, projects_path=root)
+    if index:
+        proj_str = str(p_root)
+        for p in index.get("projects", []):
+            if p.get("path") == proj_str or (p.get("slug") and (p_root / p["slug"]).exists()):
+                p["total_size"] = max(0, p.get("total_size", 0) - freed_bytes)
+                p["reclaimable_size"] = max(0, p.get("reclaimable_size", 0) - freed_bytes)
+                p["file_count"] = max(0, p.get("file_count", 0) - freed_files)
+                p["reclaimable_items"] = [it for it in all_reclaimable if it["relative_path"] not in purged]
+                break
+        _recalculate_totals(index)
+        save_storage_index(index, index_path)
 
+    remaining_items = [it for it in all_reclaimable if it["relative_path"] not in purged]
     return {
         "status": "success" if not errors else "partial_success",
         "freed_bytes": freed_bytes,
         "freed_files": freed_files,
         "purged_directories": purged,
         "errors": errors,
-        "remaining_reclaimable": sum(it["size"] for it in find_project_reclaimable_dirs(p_root)),
+        "remaining_reclaimable": sum(it["size"] for it in remaining_items),
+        "remaining_items": remaining_items,
+    }
+
+
+def stream_reclaim_project(
+    project_path: str | Path,
+    target_subdirs: list[str] | None = None,
+    projects_path: str | Path | None = None,
+    index_path: str | Path | None = None,
+):
+    """Generator yielding real-time SSE progress events while reclaiming single project space."""
+    p_root = Path(project_path).resolve()
+    if not p_root.is_dir():
+        yield {"event": "error", "message": f"Project directory not found: {project_path}"}
+        return
+
+    all_reclaimable = find_project_reclaimable_dirs(p_root)
+    if target_subdirs is not None:
+        target_set = {t.strip().replace("\\", "/").rstrip("/").lower() for t in target_subdirs if t.strip()}
+        selected = [
+            item for item in all_reclaimable
+            if item["relative_path"].lower() in target_set or item["name"].lower() in target_set
+        ]
+    else:
+        selected = all_reclaimable
+
+    total_bytes = sum(it.get("size", 0) for it in selected)
+    yield {
+        "event": "start",
+        "project": p_root.name,
+        "total_targets": len(selected),
+        "total_bytes": total_bytes,
+    }
+
+    freed_bytes = 0
+    freed_files = 0
+    purged: list[str] = []
+
+    for idx, item in enumerate(selected):
+        d_path = Path(item["path"])
+        if d_path.exists() and d_path.resolve().is_relative_to(p_root) and d_path.name in REGENERABLE_DIRS:
+            size = item["size"]
+            count = item["file_count"]
+            yield {
+                "event": "item_purging",
+                "project": p_root.name,
+                "folder": item["relative_path"],
+                "current": idx + 1,
+                "total": len(selected),
+                "total_freed": freed_bytes,
+            }
+            if robust_rmtree(str(d_path)):
+                freed_bytes += size
+                freed_files += count
+                purged.append(item["relative_path"])
+                yield {
+                    "event": "item_purged",
+                    "project": p_root.name,
+                    "folder": item["relative_path"],
+                    "freed_bytes": size,
+                    "freed_files": count,
+                    "current": idx + 1,
+                    "total": len(selected),
+                    "total_freed": freed_bytes,
+                }
+
+    # Update index
+    root = Path(projects_path or PROJECTS_PATH).resolve()
+    index = load_storage_index(index_path=index_path, projects_path=root)
+    if index:
+        proj_str = str(p_root)
+        for p in index.get("projects", []):
+            if p.get("path") == proj_str or (p.get("slug") and (p_root / p["slug"]).exists()):
+                p["total_size"] = max(0, p.get("total_size", 0) - freed_bytes)
+                p["reclaimable_size"] = max(0, p.get("reclaimable_size", 0) - freed_bytes)
+                p["file_count"] = max(0, p.get("file_count", 0) - freed_files)
+                p["reclaimable_items"] = [it for it in all_reclaimable if it["relative_path"] not in purged]
+                break
+        _recalculate_totals(index)
+        save_storage_index(index, index_path)
+
+    yield {
+        "event": "complete",
+        "total_freed_bytes": freed_bytes,
+        "total_files": freed_files,
+        "purged_directories": purged,
     }
 
 
@@ -628,7 +835,7 @@ def reclaim_bulk_space(
     projects_path: str | Path | None = None,
     index_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Reclaim regenerable space across multiple projects."""
+    """Reclaim regenerable space across multiple projects with instant index updates."""
     root = Path(projects_path or PROJECTS_PATH).resolve()
     index = load_storage_index(index_path, projects_path=root) or build_storage_index(root)
 
@@ -656,11 +863,12 @@ def reclaim_bulk_space(
         if not p_path.is_dir():
             continue
 
-        reclaimable_items = find_project_reclaimable_dirs(p_path)
+        reclaimable_items = proj.get("reclaimable_items") or find_project_reclaimable_dirs(p_path)
         if not reclaimable_items:
             continue
 
         proj_freed = 0
+        proj_files = 0
         proj_purged = []
         for item in reclaimable_items:
             d_path = Path(item["path"])
@@ -669,6 +877,7 @@ def reclaim_bulk_space(
                 file_count = item["file_count"]
                 if robust_rmtree(str(d_path)):
                     proj_freed += size
+                    proj_files += file_count
                     total_freed += size
                     total_files += file_count
                     proj_purged.append(item["relative_path"])
@@ -687,9 +896,15 @@ def reclaim_bulk_space(
                 "freed_bytes": proj_freed,
                 "purged_directories": proj_purged,
             })
+            # Directly update in-memory record
+            proj["total_size"] = max(0, proj.get("total_size", 0) - proj_freed)
+            proj["reclaimable_size"] = max(0, proj.get("reclaimable_size", 0) - proj_freed)
+            proj["file_count"] = max(0, proj.get("file_count", 0) - proj_files)
+            proj["reclaimable_items"] = [it for it in reclaimable_items if it["relative_path"] not in proj_purged]
 
-    # Global re-scan to refresh the entire storage index
-    new_index = refresh_storage_index(projects_path=root, index_path=index_path)
+    # Save instant in-memory index updates
+    _recalculate_totals(index)
+    save_storage_index(index, index_path)
 
     return {
         "status": "success",
@@ -699,8 +914,103 @@ def reclaim_bulk_space(
         "cleaned_projects": cleaned_projects,
         "log_entries": log_entries,
         "new_storage_summary": {
-            "total_size": new_index.get("total_size", 0),
-            "reclaimable_size": new_index.get("reclaimable_size", 0),
-            "media_size": new_index.get("media_size", 0),
+            "total_size": index.get("total_size", 0),
+            "reclaimable_size": index.get("reclaimable_size", 0),
+            "media_size": index.get("media_size", 0),
+        },
+    }
+
+
+def stream_reclaim_bulk(
+    stale_only: bool = False,
+    days: int = DEFAULT_STALE_DAYS,
+    project_paths: list[str] | None = None,
+    projects_path: str | Path | None = None,
+    index_path: str | Path | None = None,
+):
+    """Generator yielding real-time SSE progress events while reclaiming space across multiple projects."""
+    root = Path(projects_path or PROJECTS_PATH).resolve()
+    index = load_storage_index(index_path, projects_path=root) or build_storage_index(root)
+
+    if project_paths:
+        target_path_set = {str(Path(p).resolve()) for p in project_paths}
+        target_name_set = {p.lower().strip() for p in project_paths}
+        candidate_projects = [
+            p for p in index.get("projects", [])
+            if str(Path(p["path"]).resolve()) in target_path_set or
+               (p.get("slug") and p.get("slug").lower() in target_name_set) or
+               (p.get("name") and p.get("name").lower() in target_name_set)
+        ]
+    elif stale_only:
+        candidate_projects = stale_projects(index, stale_days=days)
+    else:
+        candidate_projects = [p for p in index.get("projects", []) if p.get("reclaimable_size", 0) > 0]
+
+    total_estimated_bytes = sum(p.get("reclaimable_size", 0) for p in candidate_projects)
+    yield {
+        "event": "start",
+        "total_projects": len(candidate_projects),
+        "total_bytes": total_estimated_bytes,
+    }
+
+    total_freed = 0
+    total_files = 0
+    cleaned_projects_count = 0
+
+    for idx, proj in enumerate(candidate_projects):
+        p_path = Path(proj["path"])
+        if not p_path.is_dir():
+            continue
+
+        reclaimable_items = proj.get("reclaimable_items") or find_project_reclaimable_dirs(p_path)
+        if not reclaimable_items:
+            continue
+
+        proj_freed = 0
+        proj_files = 0
+        proj_purged = []
+
+        for item in reclaimable_items:
+            d_path = Path(item["path"])
+            if d_path.exists() and d_path.name in REGENERABLE_DIRS and d_path.resolve().is_relative_to(p_path.resolve()):
+                size = item["size"]
+                file_count = item["file_count"]
+                if robust_rmtree(str(d_path)):
+                    proj_freed += size
+                    proj_files += file_count
+                    total_freed += size
+                    total_files += file_count
+                    proj_purged.append(item["relative_path"])
+                    yield {
+                        "event": "item_purged",
+                        "project": proj.get("name", p_path.name),
+                        "folder": item["relative_path"],
+                        "freed_bytes": size,
+                        "freed_files": file_count,
+                        "current_project_index": idx + 1,
+                        "total_projects": len(candidate_projects),
+                        "total_freed": total_freed,
+                    }
+
+        if proj_purged:
+            cleaned_projects_count += 1
+            proj["total_size"] = max(0, proj.get("total_size", 0) - proj_freed)
+            proj["reclaimable_size"] = max(0, proj.get("reclaimable_size", 0) - proj_freed)
+            proj["file_count"] = max(0, proj.get("file_count", 0) - proj_files)
+            proj["reclaimable_items"] = [it for it in reclaimable_items if it["relative_path"] not in proj_purged]
+
+    # Save instant in-memory index updates
+    _recalculate_totals(index)
+    save_storage_index(index, index_path)
+
+    yield {
+        "event": "complete",
+        "total_freed_bytes": total_freed,
+        "total_files": total_files,
+        "projects_cleaned_count": cleaned_projects_count,
+        "new_storage_summary": {
+            "total_size": index.get("total_size", 0),
+            "reclaimable_size": index.get("reclaimable_size", 0),
+            "media_size": index.get("media_size", 0),
         },
     }

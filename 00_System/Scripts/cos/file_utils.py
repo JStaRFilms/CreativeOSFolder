@@ -1,6 +1,7 @@
 """File system utilities."""
 
 import os
+import sys
 import shutil
 import statistics
 import datetime
@@ -155,22 +156,55 @@ def copy_with_progress(src: str, dst: str) -> None:
             progress.advance(task)
 
 def remove_readonly(func: Any, path: str, excinfo: Any) -> None:
-    """
-    Error handler for shutil.rmtree to remove read-only attribute and retry.
-    """
-    os.chmod(path, stat.S_IWRITE)
-    func(path)
+    """Error handler for shutil.rmtree to remove read-only attribute and retry."""
+    try:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        func(path)
+    except Exception:
+        pass
 
-def robust_rmtree(path: str, retries: int = 5, delay: int = 1) -> bool:
+
+def robust_rmtree(path: str, retries: int = 3, delay: float = 0.5) -> bool:
+    """High-performance, aggressive directory tree removal.
+    
+    On Windows, uses kernel-level native 'rd /s /q' with long path support (\\\\?\\),
+    falling back to Python's shutil.rmtree with read-only permission clearing.
     """
-    Aggressively remove a directory tree, overcoming file locks up to N retries.
-    """
+    norm_path = os.path.normpath(str(path))
+    if not os.path.exists(norm_path):
+        return True
+
     for i in range(retries):
+        # 1. On Windows, try native 'rd /s /q' with \\?\ extended path prefix
+        if sys.platform == "win32":
+            try:
+                win_path = norm_path
+                if not win_path.startswith("\\\\?\\") and len(win_path) >= 3 and win_path[1] == ":":
+                    ext_path = "\\\\?\\" + win_path
+                else:
+                    ext_path = win_path
+
+                subprocess.run(["cmd.exe", "/c", "rd", "/s", "/q", ext_path], capture_output=True, text=True, timeout=30)
+                if not os.path.exists(norm_path):
+                    return True
+            except Exception:
+                pass
+
+        # 2. Fallback to Python shutil.rmtree with robust error handler
         try:
-            shutil.rmtree(path, onerror=remove_readonly)
-            return True
-        except OSError:
-            console.print(f"[warning]Attempt {i+1}/{retries}: Failed to remove {path}. Retrying in {delay}s...[/warning]")
-            time.sleep(delay)
-    console.print(f"[error]❌ Failed to remove directory after {retries} retries: {path}[/error]")
-    return False
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(norm_path, onexc=remove_readonly)
+            else:
+                shutil.rmtree(norm_path, onerror=remove_readonly)
+
+            if not os.path.exists(norm_path):
+                return True
+        except Exception:
+            pass
+
+        time.sleep(delay)
+
+    is_gone = not os.path.exists(norm_path)
+    if not is_gone:
+        console.print(f"[error]❌ Failed to remove directory after {retries} retries: {norm_path}[/error]")
+    return is_gone

@@ -94,6 +94,17 @@ export async function renderStorage(container, options = {}) {
     const reclaimablePct = total > 0 ? ((reclaimable / total) * 100).toFixed(1) : 0;
     const otherPct = total > 0 ? ((other / total) * 100).toFixed(1) : 0;
 
+    // Update filter tab counts and stale reclaimable
+    const pList = data.projects || allProjects || [];
+    const staleProjectsList = pList.filter(p => {
+      if (p.is_stale || p.status === "stale") return true;
+      const raw = p.last_meaningful_update || p.created;
+      return raw ? new Date(raw.replace(" ", "T")).getTime() < cutoff : true;
+    });
+    const staleCount = staleProjectsList.length;
+    const staleReclaimable = staleProjectsList.reduce((sum, p) => sum + (p.reclaimable_size || 0), 0);
+    const reclaimableCount = pList.filter(p => (p.reclaimable_size || 0) > 0).length;
+
     // Header Bulk Reclaim Button update
     const bulkReclaimBtn = document.getElementById("bulk-reclaim-btn");
     const bulkReclaimLabel = document.getElementById("bulk-reclaim-header-label");
@@ -101,7 +112,11 @@ export async function renderStorage(container, options = {}) {
       if (reclaimable > 0) {
         bulkReclaimBtn.style.display = "inline-flex";
         if (bulkReclaimLabel) {
-          bulkReclaimLabel.textContent = `Reclaim Space (${formatBytes(reclaimable)})`;
+          if (activeFilter === "stale" && staleReclaimable > 0) {
+            bulkReclaimLabel.textContent = `Clean Stale Caches (${formatBytes(staleReclaimable)})`;
+          } else {
+            bulkReclaimLabel.textContent = `Reclaim All Caches (${formatBytes(reclaimable)})`;
+          }
         }
       } else {
         bulkReclaimBtn.style.display = "none";
@@ -112,15 +127,6 @@ export async function renderStorage(container, options = {}) {
     const topProjects = [...(data.projects || [])]
       .sort((a, b) => (b.total_size || 0) - (a.total_size || 0))
       .slice(0, 3);
-
-    // Update filter tab counts
-    const pList = data.projects || allProjects || [];
-    const staleCount = pList.filter(p => {
-      if (p.is_stale || p.status === "stale") return true;
-      const raw = p.last_meaningful_update || p.created;
-      return raw ? new Date(raw.replace(" ", "T")).getTime() < cutoff : true;
-    }).length;
-    const reclaimableCount = pList.filter(p => (p.reclaimable_size || 0) > 0).length;
 
     const elAll = document.getElementById("filter-count-all");
     const elStale = document.getElementById("filter-count-stale");
@@ -237,6 +243,23 @@ export async function renderStorage(container, options = {}) {
         tab.classList.remove("is-active");
       }
     });
+
+    const bulkReclaimLabel = document.getElementById("bulk-reclaim-header-label");
+    if (bulkReclaimLabel) {
+      const staleReclaimable = allProjects.filter(p => {
+        if (p.is_stale || p.status === "stale") return true;
+        const raw = p.last_meaningful_update || p.created;
+        return raw ? new Date(raw.replace(" ", "T")).getTime() < cutoff : true;
+      }).reduce((sum, p) => sum + (p.reclaimable_size || 0), 0);
+      const totalReclaimable = allProjects.reduce((sum, p) => sum + (p.reclaimable_size || 0), 0);
+
+      if (activeFilter === "stale" && staleReclaimable > 0) {
+        bulkReclaimLabel.textContent = `Clean Stale Caches (${formatBytes(staleReclaimable)})`;
+      } else {
+        bulkReclaimLabel.textContent = `Reclaim All Caches (${formatBytes(totalReclaimable)})`;
+      }
+    }
+
     renderTable();
   }
 
@@ -382,9 +405,9 @@ export async function renderStorage(container, options = {}) {
 
   const bulkReclaimBtn = document.getElementById("bulk-reclaim-btn");
   bulkReclaimBtn?.addEventListener("click", () => {
-    openBulkReclaimModal({ projects: allProjects }, () => {
-      loadData();
-    });
+    openBulkReclaimModal({ projects: allProjects }, async () => {
+      await loadData();
+    }, activeFilter === "stale" ? "stale" : "all");
   });
 
   const rescanBtn = document.getElementById("rescan-storage-btn");

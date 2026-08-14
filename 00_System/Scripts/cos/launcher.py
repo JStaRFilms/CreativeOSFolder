@@ -116,24 +116,28 @@ def get_browser_profile_dir() -> str:
     return profile_dir
 
 
-def start_background_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, reload: bool = False) -> subprocess.Popen:
+def start_background_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, reload: bool = False) -> Optional[subprocess.Popen]:
     """Launch the FastAPI server as a detached, silent background process with managed lifecycle."""
-    python_exe = find_python_executable(gui=True)
-    scripts_dir = str(Path(SCRIPT_DIR).resolve())
+    if is_server_running(host, port, timeout=0.5):
+        logger.info(f"CreativeOS server is already running on {host}:{port}")
+        return None
+
+    python_exe = find_python_executable(gui=False)
+    scripts_dir = os.path.join(ROOT_PATH, "00_System", "Scripts")
+    manage_py = os.path.join(scripts_dir, "manage.py")
     
     env = os.environ.copy()
     existing_pythonpath = env.get("PYTHONPATH", "")
     if scripts_dir not in existing_pythonpath:
         env["PYTHONPATH"] = f"{scripts_dir}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else scripts_dir
 
-    # Flag this server as managed so its heartbeat watchdog will auto-terminate it when all GUI windows close
     env["CREATIVEOS_MANAGED"] = "1"
 
     cmd = [
         python_exe,
-        "-m",
-        "uvicorn",
-        "cos.api:app",
+        manage_py,
+        "gui",
+        "--no-browser",
         "--host",
         host,
         "--port",
@@ -144,43 +148,93 @@ def start_background_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, 
 
     creationflags = 0
     if sys.platform == "win32":
-        # CREATE_NO_WINDOW = 0x08000000 | DETACHED_PROCESS = 0x00000008
-        creationflags = 0x08000000 | 0x00000008
+        creationflags = 0x08000000  # CREATE_NO_WINDOW
+
+    startup_log_path = os.path.join(ROOT_PATH, "00_System", "Config", "server_startup.log")
+    try:
+        log_file = open(startup_log_path, "w", encoding="utf-8")
+    except Exception:
+        log_file = subprocess.DEVNULL
 
     logger.info(f"Spawning background CreativeOS server on {host}:{port} with {python_exe}")
     proc = subprocess.Popen(
         cmd,
         cwd=scripts_dir,
         env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_file,
+        stderr=log_file,
         stdin=subprocess.DEVNULL,
         creationflags=creationflags,
     )
 
-    # Wait for the server to become healthy (up to 6 seconds)
+    # Wait for the server to become healthy (up to 8 seconds)
     start_time = time.time()
-    while time.time() - start_time < 6.0:
-        if is_server_running(host, port, timeout=0.2):
+    while time.time() - start_time < 8.0:
+        if is_server_running(host, port, timeout=0.3):
             logger.info(f"Background server ready in {time.time() - start_time:.2f}s")
             return proc
         if proc.poll() is not None:
-            raise RuntimeError(f"CreativeOS server exited prematurely with return code {proc.returncode}")
-        time.sleep(0.1)
+            time.sleep(0.3)
+            if is_server_running(host, port, timeout=0.5):
+                logger.info("Server is responding on port.")
+                return proc
+            err_msg = ""
+            if os.path.isfile(startup_log_path):
+                try:
+                    with open(startup_log_path, "r", encoding="utf-8") as f:
+                        err_msg = f.read().strip()
+                except Exception:
+                    pass
+            detail = f": {err_msg}" if err_msg else ""
+            raise RuntimeError(f"CreativeOS server exited prematurely with return code {proc.returncode}{detail}")
+        time.sleep(0.15)
 
-    raise TimeoutError(f"CreativeOS server on {host}:{port} did not respond within 6 seconds.")
+    if is_server_running(host, port, timeout=0.5):
+        return proc
+
+    raise TimeoutError(f"CreativeOS server on {host}:{port} did not respond within 8 seconds.")
 
 
 def launch_app_window(url: str) -> Tuple[Optional[subprocess.Popen], str]:
     """Launch the standalone app window in frameless Chromium app mode, or open default browser."""
-    browser_exe, browser_name = find_app_browser()
+    if sys.platform == "win32":
+        # First check for installed Edge PWA via msedge_proxy
+        edge_proxy_candidates = [
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge_proxy.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge_proxy.exe",
+        ]
+        edge_proxy = next((p for p in edge_proxy_candidates if os.path.isfile(p)), None)
+        
+        web_apps_dir = os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Web Applications")
+        found_app_id = None
+        if os.path.isdir(web_apps_dir):
+            for entry in os.listdir(web_apps_dir):
+                if entry.startswith("_crx__") and os.path.isfile(os.path.join(web_apps_dir, entry, "CreativeOS.ico")):
+                    found_app_id = entry[6:]
+                    break
+        
+        if edge_proxy and found_app_id:
+            args = [
+                edge_proxy,
+                "--profile-directory=Default",
+                f"--app-id={found_app_id}",
+                f"--app-url={url}",
+                "--app-launch-source=4",
+            ]
+            logger.info(f"Launching Edge PWA with App ID {found_app_id}: {' '.join(args)}")
+            proc = subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            return proc, "Microsoft Edge PWA"
 
+    browser_exe, browser_name = find_app_browser()
     if browser_exe:
-        profile_dir = get_browser_profile_dir()
         args = [
             browser_exe,
             f"--app={url}",
-            f"--user-data-dir={profile_dir}",
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-features=Translate",
@@ -194,7 +248,6 @@ def launch_app_window(url: str) -> Tuple[Optional[subprocess.Popen], str]:
         )
         return proc, browser_name
     else:
-        # Fallback to default browser
         import webbrowser
         webbrowser.open(url)
         return None, "Default Browser"
@@ -358,67 +411,35 @@ def register_uri_protocol() -> bool:
 
 
 def install_desktop_shortcuts() -> list[str]:
-    """Install CreativeOS shortcuts on Desktop, Start Menu, and CreativeOS Root."""
+    """Install CreativeOS shortcuts on Desktop, Start Menu, and CreativeOS Root with AUMID grouping."""
     if sys.platform != "win32":
         return []
 
     target_exe = os.path.join(ROOT_PATH, "CreativeOS.exe")
-    if not os.path.isfile(target_exe):
-        built = build_native_executable()
-        if built:
-            target_exe = built
+    built = build_native_executable()
+    if built:
+        target_exe = built
 
     register_uri_protocol()
 
-    arguments = ""
-    if not os.path.isfile(target_exe):
-        target_exe = find_python_executable(gui=True)
-        launcher_py = os.path.join(ROOT_PATH, "00_System", "Scripts", "cos", "launcher.py")
-        arguments = f'"{launcher_py}"'
+    # If CreativeOS.exe is available, use its native IShellLink + IPropertyStore installer
+    if os.path.isfile(target_exe):
+        try:
+            res = subprocess.run([target_exe, "--install-shortcuts"], capture_output=True, text=True, timeout=10)
+            logger.info(f"Native shortcut installation output: {res.stdout}")
+        except Exception as e:
+            logger.warning(f"Native shortcut installation failed: {e}")
 
-    icon_path = get_icon_path() or ""
-    created_paths: list[str] = []
-
-    # 1. Root Directory Shortcut
-    root_shortcut = os.path.join(ROOT_PATH, "CreativeOS.lnk")
-    if create_windows_shortcut(
-        target_path=target_exe,
-        shortcut_path=root_shortcut,
-        arguments=arguments,
-        icon_path=icon_path,
-        description="CreativeOS Studio Hub",
-    ):
-        created_paths.append(root_shortcut)
-
-    # 2. User Desktop Shortcut
     desktop_dir = os.path.join(os.environ.get("USERPROFILE", os.path.expanduser("~")), "Desktop")
-    if os.path.isdir(desktop_dir):
-        desktop_shortcut = os.path.join(desktop_dir, "CreativeOS.lnk")
-        if create_windows_shortcut(
-            target_path=target_exe,
-            shortcut_path=desktop_shortcut,
-            arguments=arguments,
-            icon_path=icon_path,
-            description="CreativeOS Studio Hub",
-        ):
-            created_paths.append(desktop_shortcut)
-
-    # 3. Start Menu Shortcut
     appdata = os.environ.get("APPDATA", "")
-    if appdata:
-        start_menu_programs = os.path.join(appdata, "Microsoft", "Windows", "Start Menu", "Programs")
-        if os.path.isdir(start_menu_programs):
-            start_shortcut = os.path.join(start_menu_programs, "CreativeOS.lnk")
-            if create_windows_shortcut(
-                target_path=target_exe,
-                shortcut_path=start_shortcut,
-                arguments=arguments,
-                icon_path=icon_path,
-                description="CreativeOS Studio Hub",
-            ):
-                created_paths.append(start_shortcut)
+    start_menu_programs = os.path.join(appdata, "Microsoft", "Windows", "Start Menu", "Programs") if appdata else ""
 
-    return created_paths
+    created_paths = [
+        os.path.join(ROOT_PATH, "CreativeOS.lnk"),
+        os.path.join(desktop_dir, "CreativeOS.lnk"),
+        os.path.join(start_menu_programs, "CreativeOS.lnk") if start_menu_programs else "",
+    ]
+    return [p for p in created_paths if p and os.path.isfile(p)]
 
 
 def run_app_lifecycle(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, reload: bool = False) -> int:

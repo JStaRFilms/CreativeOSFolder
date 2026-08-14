@@ -1,11 +1,14 @@
 /**
  * Reclaim Space & Dependency Cache Modal Component
- * Precision Studio tools for selective and bulk cache recovery.
+ * Precision Studio tools for selective and bulk cache recovery with real-time SSE streaming.
  */
 
 import { api, formatBytes } from "../api.js";
 import { getCategoryIconSvg, icons } from "../icons.js";
 import { showToast } from "./toast.js";
+
+// Global tracker for background reclaim jobs
+let activeReclaimJob = null;
 
 function getReclaimTag(path) {
   const p = (path || "").toLowerCase();
@@ -14,6 +17,55 @@ function getReclaimTag(path) {
   if (p.includes("__pycache__")) return "Pycache";
   if (p.includes(".next") || p.includes(".nuxt") || p.includes(".turbo") || p.includes(".cache")) return "Build Cache";
   return "Cache";
+}
+
+/**
+ * Render or update the persistent floating progress pill when the modal is closed during execution.
+ */
+function updateFloatingProgressPill() {
+  let pill = document.getElementById("reclaim-floating-pill");
+  if (!activeReclaimJob || !activeReclaimJob.running) {
+    if (pill) {
+      pill.style.opacity = "0";
+      pill.style.transform = "translateY(20px)";
+      setTimeout(() => pill && pill.remove(), 300);
+    }
+    return;
+  }
+
+  if (!pill) {
+    pill = document.createElement("div");
+    pill.id = "reclaim-floating-pill";
+    pill.className = "reclaim-floating-pill";
+    document.body.appendChild(pill);
+  }
+
+  const { title, current, total, totalFreed, status } = activeReclaimJob;
+  const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+  const isDone = status === "complete";
+
+  pill.innerHTML = `
+    <div class="reclaim-pill-pulse" style="background-color: ${isDone ? 'var(--color-success)' : 'var(--color-warning)'};"></div>
+    <div style="display: flex; flex-direction: column; gap: 0.1rem;">
+      <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-primary);">
+        ${isDone ? `⚡ Reclaimed ${formatBytes(totalFreed)}` : `⚡ ${title}`}
+      </span>
+      <span style="font-size: 0.65rem; color: var(--text-muted);" class="font-mono">
+        ${isDone ? 'All caches cleared' : `${current}/${total} items &bull; Freed ${formatBytes(totalFreed)}`}
+      </span>
+    </div>
+    ${!isDone ? `
+      <div class="reclaim-pill-progress-bar">
+        <div class="reclaim-pill-progress-fill" style="width: ${pct}%;"></div>
+      </div>
+    ` : ''}
+  `;
+
+  pill.onclick = () => {
+    if (activeReclaimJob && activeReclaimJob.reopen) {
+      activeReclaimJob.reopen();
+    }
+  };
 }
 
 /**
@@ -28,17 +80,18 @@ export async function openReclaimModal(project, onReclaimed) {
   container.className = "modal-backdrop is-open";
 
   const cat = project.type || "Video";
-  const catIcon = getCategoryIconSvg(cat);
   const lookupKey = project.relative_path || project.slug || project.name;
 
   container.innerHTML = `
     <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reclaim-title" style="max-width: 520px;">
       <div class="modal-header">
-        <div class="modal-title-group">
-          <span class="modal-cat-icon" style="color: var(--color-warning);">${icons.zap}</span>
-          <div>
+        <div class="modal-title-group" style="min-width: 0; flex: 1;">
+          <span class="modal-cat-icon" style="color: var(--color-warning); flex-shrink: 0;">${icons.zap}</span>
+          <div style="min-width: 0; flex: 1;">
             <h3 id="reclaim-title" class="modal-title">Reclaim Project Space</h3>
-            <span class="modal-subtitle font-mono">${project.name} &bull; ${project.relative_path || project.slug}</span>
+            <span class="modal-subtitle font-mono" title="${project.name} • ${project.relative_path || project.slug}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 380px; display: block;">
+              ${project.name} &bull; ${project.relative_path || project.slug}
+            </span>
           </div>
         </div>
         <button class="modal-close-btn" id="reclaim-close-btn" aria-label="Close dialog">
@@ -53,7 +106,7 @@ export async function openReclaimModal(project, onReclaimed) {
         </div>
 
         <div id="reclaim-content-wrap" style="display: none; flex-direction: column; gap: 0.85rem;">
-          <!-- Clean Summary Bar -->
+          <!-- Summary Bar -->
           <div class="reclaim-summary-bar">
             <span>Selected: <strong id="reclaim-selected-bytes" class="font-mono">0 B</strong> across <span id="reclaim-selected-count">0 items</span></span>
             <button type="button" id="reclaim-select-all-btn" class="btn-link-action">Deselect All</button>
@@ -61,6 +114,17 @@ export async function openReclaimModal(project, onReclaimed) {
 
           <!-- Single Unified Table Surface -->
           <div id="reclaim-items-list" class="reclaim-table-surface"></div>
+
+          <!-- Real-time Progress Bar & Console (Shown while running) -->
+          <div id="reclaim-progress-wrap" style="display: none; flex-direction: column; gap: 0.4rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.725rem; color: var(--text-muted);">
+              <span id="reclaim-progress-status">Reclaiming...</span>
+              <span id="reclaim-progress-freed" class="font-mono">0 B freed</span>
+            </div>
+            <div class="reclaim-pill-progress-bar" style="width: 100%; height: 6px;">
+              <div id="reclaim-progress-bar-fill" class="reclaim-pill-progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
 
           <!-- Minimal Safety Line -->
           <div class="reclaim-safe-line">
@@ -82,9 +146,16 @@ export async function openReclaimModal(project, onReclaimed) {
 
   document.body.appendChild(container);
 
+  let isRunning = false;
+
   const close = () => {
     container.classList.remove("is-open");
-    setTimeout(() => container.remove(), 200);
+    setTimeout(() => {
+      container.remove();
+      if (isRunning && activeReclaimJob) {
+        updateFloatingProgressPill();
+      }
+    }, 200);
   };
 
   container.querySelector("#reclaim-close-btn").addEventListener("click", close);
@@ -105,6 +176,10 @@ export async function openReclaimModal(project, onReclaimed) {
     const selectedBadge = container.querySelector("#reclaim-selected-bytes");
     const selectedCountEl = container.querySelector("#reclaim-selected-count");
     const selectAllBtn = container.querySelector("#reclaim-select-all-btn");
+    const progressWrap = container.querySelector("#reclaim-progress-wrap");
+    const progressBarFill = container.querySelector("#reclaim-progress-bar-fill");
+    const progressStatus = container.querySelector("#reclaim-progress-status");
+    const progressFreed = container.querySelector("#reclaim-progress-freed");
 
     loadingEl.style.display = "none";
     contentEl.style.display = "flex";
@@ -120,17 +195,17 @@ export async function openReclaimModal(project, onReclaimed) {
       return;
     }
 
-    // Render list
+    // Render list with robust text truncation
     listEl.innerHTML = items.map((item, idx) => `
       <div class="reclaim-table-row" data-idx="${idx}" data-path="${item.relative_path}" data-size="${item.size}">
         <div class="reclaim-row-left">
           <input type="checkbox" class="reclaim-checkbox" checked data-idx="${idx}" />
           <div class="reclaim-row-info">
             <div class="reclaim-row-title">
-              <span class="font-mono">${item.relative_path}/</span>
+              <span class="font-mono reclaim-name-text" title="${item.relative_path}">${item.relative_path}/</span>
               <span class="reclaim-pill-tag">${getReclaimTag(item.relative_path)}</span>
             </div>
-            <span class="reclaim-row-desc">${item.description}</span>
+            <span class="reclaim-row-desc" title="${item.description}">${item.description}</span>
           </div>
         </div>
         <div class="reclaim-row-right">
@@ -192,8 +267,42 @@ export async function openReclaimModal(project, onReclaimed) {
       updateTotals();
     });
 
-    // Execute button
+    // Check if this project is already actively reclaiming in the background
+    const isJobActive = activeReclaimJob && activeReclaimJob.running && activeReclaimJob.projectKey === lookupKey;
+
+    if (isJobActive) {
+      isRunning = true;
+      executeBtn.disabled = true;
+      executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Reclaiming...</span>`;
+      progressWrap.style.display = "flex";
+
+      const pct = activeReclaimJob.total > 0 ? Math.min(100, Math.round((activeReclaimJob.current / activeReclaimJob.total) * 100)) : 0;
+      progressBarFill.style.width = `${pct}%`;
+      progressStatus.textContent = activeReclaimJob.statusText || `Reclaiming (${activeReclaimJob.current}/${activeReclaimJob.total})...`;
+      progressFreed.textContent = `Freed ${formatBytes(activeReclaimJob.totalFreed)}`;
+
+      listEl.querySelectorAll(".reclaim-checkbox").forEach(cb => {
+        cb.disabled = true;
+      });
+
+      activeReclaimJob.onProgress = (job) => {
+        const p = job.total > 0 ? Math.min(100, Math.round((job.current / job.total) * 100)) : 0;
+        if (progressBarFill) progressBarFill.style.width = `${p}%`;
+        if (progressStatus) progressStatus.textContent = job.statusText || `Purged ${job.current}/${job.total}`;
+        if (progressFreed) progressFreed.textContent = `Freed ${formatBytes(job.totalFreed)}`;
+      };
+
+      activeReclaimJob.onCompleteModal = (completeData) => {
+        isRunning = false;
+        close();
+        if (onReclaimed) onReclaimed(completeData);
+      };
+    }
+
+    // Execute button with real-time SSE stream & floating indicator
     executeBtn.addEventListener("click", async () => {
+      if (isRunning) return;
+
       const selectedTargets = [];
       listEl.querySelectorAll(".reclaim-table-row").forEach(row => {
         const cb = row.querySelector(".reclaim-checkbox");
@@ -204,18 +313,119 @@ export async function openReclaimModal(project, onReclaimed) {
 
       if (selectedTargets.length === 0) return;
 
+      isRunning = true;
       executeBtn.disabled = true;
       executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Reclaiming...</span>`;
+      progressWrap.style.display = "flex";
+
+      listEl.querySelectorAll(".reclaim-checkbox").forEach(cb => {
+        cb.disabled = true;
+      });
+
+      let totalFreed = 0;
+      let currentItem = 0;
+      const totalItems = selectedTargets.length;
+
+      activeReclaimJob = {
+        running: true,
+        projectKey: lookupKey,
+        project: project,
+        title: `Reclaiming ${project.name}`,
+        current: 0,
+        total: totalItems,
+        totalFreed: 0,
+        statusText: `Purging ${selectedTargets[0]}...`,
+        status: "running",
+        onProgress: (job) => {
+          const p = job.total > 0 ? Math.min(100, Math.round((job.current / job.total) * 100)) : 0;
+          if (progressBarFill) progressBarFill.style.width = `${p}%`;
+          if (progressStatus) progressStatus.textContent = job.statusText || `Purged ${job.current}/${job.total}`;
+          if (progressFreed) progressFreed.textContent = `Freed ${formatBytes(job.totalFreed)}`;
+        },
+        onCompleteModal: null,
+        reopen: () => openReclaimModal(project, onReclaimed),
+      };
+
+      updateFloatingProgressPill();
 
       try {
-        const purgeRes = await api.reclaimProject(lookupKey, selectedTargets);
-        showToast(`⚡ Reclaimed ${formatBytes(purgeRes.freed_bytes || 0)} from ${project.name}!`, "success");
-        close();
-        if (onReclaimed) onReclaimed(purgeRes);
+        api.streamReclaim(
+          { project: lookupKey, targets: selectedTargets },
+          (event) => {
+            if (event.event === "start") {
+              if (activeReclaimJob) {
+                activeReclaimJob.total = event.total_targets || totalItems;
+                activeReclaimJob.statusText = `Starting reclaim for ${event.project}...`;
+                updateFloatingProgressPill();
+                if (activeReclaimJob.onProgress) activeReclaimJob.onProgress(activeReclaimJob);
+              }
+            } else if (event.event === "item_purging") {
+              currentItem = event.current || currentItem;
+              if (activeReclaimJob) {
+                activeReclaimJob.current = currentItem;
+                activeReclaimJob.statusText = `Purging ${event.folder} (${currentItem}/${activeReclaimJob.total})...`;
+                updateFloatingProgressPill();
+                if (activeReclaimJob.onProgress) activeReclaimJob.onProgress(activeReclaimJob);
+              }
+            } else if (event.event === "item_purged") {
+              currentItem = event.current || (currentItem + 1);
+              totalFreed = event.total_freed || totalFreed;
+              if (activeReclaimJob) {
+                activeReclaimJob.current = currentItem;
+                activeReclaimJob.totalFreed = totalFreed;
+                activeReclaimJob.statusText = `Purged ${event.folder} (${currentItem}/${activeReclaimJob.total})`;
+                updateFloatingProgressPill();
+                if (activeReclaimJob.onProgress) activeReclaimJob.onProgress(activeReclaimJob);
+              }
+            }
+          },
+          (err) => {
+            isRunning = false;
+            if (activeReclaimJob) activeReclaimJob.running = false;
+            updateFloatingProgressPill();
+            showToast(err.message || "Failed to reclaim space", "error");
+            executeBtn.disabled = false;
+            executeBtn.innerHTML = `${icons.zap} <span>Reclaim Space</span>`;
+            listEl.querySelectorAll(".reclaim-checkbox").forEach(cb => {
+              cb.disabled = false;
+            });
+          },
+          (completeData) => {
+            isRunning = false;
+            totalFreed = completeData.total_freed_bytes || totalFreed;
+            showToast(`⚡ Reclaimed ${formatBytes(totalFreed)} from ${project.name}!`, "success");
+
+            if (activeReclaimJob) {
+              activeReclaimJob.status = "complete";
+              activeReclaimJob.totalFreed = totalFreed;
+              updateFloatingProgressPill();
+              if (activeReclaimJob.onCompleteModal) {
+                activeReclaimJob.onCompleteModal(completeData);
+              }
+              setTimeout(() => {
+                activeReclaimJob = null;
+                updateFloatingProgressPill();
+              }, 3000);
+            }
+
+            close();
+            if (onReclaimed) onReclaimed(completeData);
+          }
+        );
       } catch (err) {
-        showToast(err.message || "Failed to reclaim space", "error");
-        executeBtn.disabled = false;
-        executeBtn.innerHTML = `${icons.zap} <span>Reclaim Space</span>`;
+        // Fallback to direct POST if SSE is unsupported
+        try {
+          const purgeRes = await api.reclaimProject(lookupKey, selectedTargets);
+          showToast(`⚡ Reclaimed ${formatBytes(purgeRes.freed_bytes || 0)} from ${project.name}!`, "success");
+          activeReclaimJob = null;
+          updateFloatingProgressPill();
+          close();
+          if (onReclaimed) onReclaimed(purgeRes);
+        } catch (fallbackErr) {
+          showToast(fallbackErr.message || "Failed to reclaim space", "error");
+          executeBtn.disabled = false;
+          executeBtn.innerHTML = `${icons.zap} <span>Reclaim Space</span>`;
+        }
       }
     });
 
@@ -230,7 +440,7 @@ export async function openReclaimModal(project, onReclaimed) {
 /**
  * Open Workspace-Wide Bulk Reclaim Modal (Stale >90d or All Projects)
  */
-export function openBulkReclaimModal(storageData, onReclaimed) {
+export function openBulkReclaimModal(storageData, onReclaimed, initialTab = "all") {
   const existingModal = document.getElementById("bulk-reclaim-modal-container");
   if (existingModal) existingModal.remove();
 
@@ -250,16 +460,22 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
     return dt < cutoffTime;
   });
 
-  let currentTab = staleBloat.length > 0 ? "stale" : "all";
+  const staleBytes = staleBloat.reduce((sum, p) => sum + (p.reclaimable_size || 0), 0);
+  const allBytes = allBloat.reduce((sum, p) => sum + (p.reclaimable_size || 0), 0);
+
+  let currentTab = (initialTab === "stale" && staleBloat.length > 0) ? "stale" : "all";
+  let isRunning = false;
 
   container.innerHTML = `
     <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="bulk-reclaim-title" style="max-width: 600px;">
       <div class="modal-header">
-        <div class="modal-title-group">
-          <span class="modal-cat-icon" style="color: var(--color-warning);">${icons.zap}</span>
-          <div>
+        <div class="modal-title-group" style="min-width: 0; flex: 1;">
+          <span class="modal-cat-icon" style="color: var(--color-warning); flex-shrink: 0;">${icons.zap}</span>
+          <div style="min-width: 0; flex: 1;">
             <h3 id="bulk-reclaim-title" class="modal-title">Bulk Cache Recovery</h3>
-            <span class="modal-subtitle">Purge dependency caches across inactive projects</span>
+            <span class="modal-subtitle font-mono" id="bulk-reclaim-subtitle" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; display: block;">
+              ${currentTab === 'all' ? `All Reclaimable Projects • ${formatBytes(allBytes)} total` : `Stale Projects (>90d Inactive) • ${formatBytes(staleBytes)} total`}
+            </span>
           </div>
         </div>
         <button class="modal-close-btn" id="bulk-reclaim-close-btn" aria-label="Close dialog">
@@ -270,13 +486,13 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
       <div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.85rem;">
         <!-- Tabs -->
         <div class="bulk-reclaim-tabs">
-          <button type="button" class="bulk-tab-btn ${currentTab === 'stale' ? 'is-active' : ''}" data-tab="stale">
-            <span>Stale Projects (&gt;90d Inactive)</span>
-            <span class="badge font-mono" style="font-size: 0.65rem;">${staleBloat.length}</span>
-          </button>
           <button type="button" class="bulk-tab-btn ${currentTab === 'all' ? 'is-active' : ''}" data-tab="all">
             <span>All Projects with Cache</span>
-            <span class="badge font-mono" style="font-size: 0.65rem;">${allBloat.length}</span>
+            <span class="badge font-mono" style="font-size: 0.65rem;">${allBloat.length} (${formatBytes(allBytes)})</span>
+          </button>
+          <button type="button" class="bulk-tab-btn ${currentTab === 'stale' ? 'is-active' : ''}" data-tab="stale">
+            <span>Stale (&gt;90d Inactive)</span>
+            <span class="badge font-mono" style="font-size: 0.65rem;">${staleBloat.length} (${formatBytes(staleBytes)})</span>
           </button>
         </div>
 
@@ -294,6 +510,9 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
           <div class="console-top-bar">
             <span class="console-title font-mono">Reclaim Engine Stream</span>
             <span id="bulk-console-status" class="console-time font-mono">Ready</span>
+          </div>
+          <div class="reclaim-pill-progress-bar" style="width: 100%; height: 4px; border-radius: 0;">
+            <div id="bulk-progress-bar-fill" class="reclaim-pill-progress-fill" style="width: 0%;"></div>
           </div>
           <div id="bulk-console-body" class="console-body font-mono" style="max-height: 160px;"></div>
         </div>
@@ -319,7 +538,12 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
 
   const close = () => {
     container.classList.remove("is-open");
-    setTimeout(() => container.remove(), 200);
+    setTimeout(() => {
+      container.remove();
+      if (isRunning && activeReclaimJob) {
+        updateFloatingProgressPill();
+      }
+    }, 200);
   };
 
   container.querySelector("#bulk-reclaim-close-btn").addEventListener("click", close);
@@ -337,6 +561,7 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
   const consoleEl = container.querySelector("#bulk-reclaim-console");
   const consoleBody = container.querySelector("#bulk-console-body");
   const consoleStatus = container.querySelector("#bulk-console-status");
+  const progressBarFill = container.querySelector("#bulk-progress-bar-fill");
 
   function renderTabContent() {
     const list = currentTab === "stale" ? staleBloat : allBloat;
@@ -355,7 +580,6 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
 
     listContainer.innerHTML = list.map((p, idx) => {
       const cat = p.type || "Video";
-      const icon = getCategoryIconSvg(cat);
       const isStale = p.is_stale || p.status === "stale" || (p.last_meaningful_update && new Date(p.last_meaningful_update).getTime() < cutoffTime);
 
       return `
@@ -364,11 +588,11 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
             <input type="checkbox" class="reclaim-checkbox" checked data-slug="${p.slug || p.name}" />
             <div class="reclaim-row-info">
               <div class="reclaim-row-title">
-                <span style="font-weight: 700;">${p.name}</span>
+                <span class="reclaim-name-text" title="${p.name}" style="font-weight: 700;">${p.name}</span>
                 <span class="reclaim-pill-tag font-mono">${cat}</span>
                 ${isStale ? '<span class="cell-status-dot dot-stale" title="Stale (>90d)"></span>' : ''}
               </div>
-              <span class="reclaim-row-desc font-mono">${p.relative_path || p.slug}</span>
+              <span class="reclaim-row-desc font-mono" title="${p.relative_path || p.slug}">${p.relative_path || p.slug}</span>
             </div>
           </div>
           <div class="reclaim-row-right">
@@ -426,6 +650,12 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
       container.querySelectorAll(".bulk-tab-btn").forEach(b => b.classList.remove("is-active"));
       btn.classList.add("is-active");
       currentTab = btn.getAttribute("data-tab");
+      const subtitleEl = container.querySelector("#bulk-reclaim-subtitle");
+      if (subtitleEl) {
+        subtitleEl.textContent = currentTab === 'all'
+          ? `All Reclaimable Projects • ${formatBytes(allBytes)} total`
+          : `Stale Projects (>90d Inactive) • ${formatBytes(staleBytes)} total`;
+      }
       renderTabContent();
     });
   });
@@ -441,71 +671,211 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
     updateSummary();
   });
 
-  // Execute Bulk Reclaim
-  executeBtn.addEventListener("click", async () => {
-    const selectedSlugs = [];
-    listContainer.querySelectorAll(".reclaim-table-row").forEach(card => {
-      const cb = card.querySelector(".reclaim-checkbox");
-      if (cb && cb.checked) {
-        selectedSlugs.push(card.getAttribute("data-slug"));
+    const isBulkActive = activeReclaimJob && activeReclaimJob.running && activeReclaimJob.isBulk;
+    if (isBulkActive) {
+      isRunning = true;
+      executeBtn.disabled = true;
+      executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Reclaiming Caches...</span>`;
+      consoleEl.style.display = "block";
+      consoleStatus.textContent = activeReclaimJob.statusText || "Running Reclaim...";
+      const pct = activeReclaimJob.total > 0 ? Math.min(100, Math.round((activeReclaimJob.current / activeReclaimJob.total) * 100)) : 0;
+      progressBarFill.style.width = `${pct}%`;
+
+      if (activeReclaimJob.logs && activeReclaimJob.logs.length > 0) {
+        consoleBody.innerHTML = activeReclaimJob.logs.join("");
+        consoleBody.scrollTop = consoleBody.scrollHeight;
       }
-    });
 
-    if (selectedSlugs.length === 0) return;
-
-    executeBtn.disabled = true;
-    executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Reclaiming Caches...</span>`;
-    consoleEl.style.display = "block";
-    consoleStatus.textContent = "Running Reclaim...";
-    consoleBody.innerHTML = `<div class="log-entry log-info"><span>[Engine]</span> <span>Starting bulk reclaim for ${selectedSlugs.length} projects...</span></div>`;
-
-    try {
-      const result = await api.reclaimBulk({
-        project_slugs: selectedSlugs,
+      listContainer.querySelectorAll(".reclaim-checkbox").forEach(cb => {
+        cb.disabled = true;
       });
 
-      const logEntries = result.log_entries || [];
-      if (logEntries.length > 0) {
-        logEntries.forEach(entry => {
+      activeReclaimJob.onProgress = (job) => {
+        const p = job.total > 0 ? Math.min(100, Math.round((job.current / job.total) * 100)) : 0;
+        if (progressBarFill) progressBarFill.style.width = `${p}%`;
+        if (consoleStatus) consoleStatus.textContent = job.statusText || `${job.current}/${job.total} Projects (${formatBytes(job.totalFreed)})`;
+        if (job.logs && consoleBody) {
+          consoleBody.innerHTML = job.logs.join("");
+          consoleBody.scrollTop = consoleBody.scrollHeight;
+        }
+      };
+
+      activeReclaimJob.onCompleteModal = (completeData) => {
+        isRunning = false;
+        progressBarFill.style.width = "100%";
+        consoleStatus.textContent = "Finished";
+        executeBtn.style.display = "none";
+        const cancelBtn = container.querySelector("#bulk-reclaim-cancel-btn");
+        if (cancelBtn) {
+          cancelBtn.textContent = "Done";
+          cancelBtn.classList.remove("btn-secondary");
+          cancelBtn.classList.add("btn-primary");
+        }
+        if (onReclaimed) onReclaimed(completeData);
+      };
+    }
+
+    // Execute Bulk Reclaim with Real-time SSE Stream
+    executeBtn.addEventListener("click", async () => {
+      if (isRunning) return;
+
+      const selectedSlugs = [];
+      listContainer.querySelectorAll(".reclaim-table-row").forEach(card => {
+        const cb = card.querySelector(".reclaim-checkbox");
+        if (cb && cb.checked) {
+          selectedSlugs.push(card.getAttribute("data-slug"));
+        }
+      });
+
+      if (selectedSlugs.length === 0) return;
+
+      isRunning = true;
+      executeBtn.disabled = true;
+      executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Reclaiming Caches...</span>`;
+      consoleEl.style.display = "block";
+      consoleStatus.textContent = "Running Reclaim...";
+      const initialLog = `<div class="log-entry log-info"><span>[Engine]</span> <span>Starting bulk reclaim for ${selectedSlugs.length} projects...</span></div>`;
+      consoleBody.innerHTML = initialLog;
+
+      listContainer.querySelectorAll(".reclaim-checkbox").forEach(cb => {
+        cb.disabled = true;
+      });
+
+      let totalFreed = 0;
+      let projectsDone = 0;
+      const totalProjects = selectedSlugs.length;
+
+      activeReclaimJob = {
+        running: true,
+        isBulk: true,
+        title: `Bulk Reclaiming Space`,
+        current: 0,
+        total: totalProjects,
+        totalFreed: 0,
+        statusText: `Starting bulk reclaim for ${totalProjects} projects...`,
+        logs: [initialLog],
+        status: "running",
+        onProgress: (job) => {
+          const pct = job.total > 0 ? Math.min(100, Math.round((job.current / job.total) * 100)) : 0;
+          if (progressBarFill) progressBarFill.style.width = `${pct}%`;
+          if (consoleStatus) consoleStatus.textContent = job.statusText || `${job.current}/${job.total} Projects (${formatBytes(job.totalFreed)})`;
+          if (job.logs && consoleBody) {
+            consoleBody.innerHTML = job.logs.join("");
+            consoleBody.scrollTop = consoleBody.scrollHeight;
+          }
+        },
+        onCompleteModal: null,
+        reopen: () => openBulkReclaimModal(storageData, onReclaimed),
+      };
+
+      updateFloatingProgressPill();
+
+      try {
+        api.streamReclaim(
+          { slugs: selectedSlugs },
+          (event) => {
+            if (event.event === "item_purged") {
+              projectsDone = event.current_project_index || (projectsDone + 1);
+              totalFreed = event.total_freed || totalFreed;
+              const logLine = `
+                <div class="log-entry log-purge">
+                  <span>[Reclaimed]</span>
+                  <span>${event.project} / ${event.folder} &rarr; Freed ${formatBytes(event.freed_bytes || 0)}</span>
+                </div>
+              `;
+              if (activeReclaimJob) {
+                activeReclaimJob.current = projectsDone;
+                activeReclaimJob.totalFreed = totalFreed;
+                activeReclaimJob.statusText = `${projectsDone}/${totalProjects} Projects (${formatBytes(totalFreed)})`;
+                if (!activeReclaimJob.logs) activeReclaimJob.logs = [];
+                activeReclaimJob.logs.push(logLine);
+                updateFloatingProgressPill();
+                if (activeReclaimJob.onProgress) activeReclaimJob.onProgress(activeReclaimJob);
+              }
+            }
+          },
+          (err) => {
+            isRunning = false;
+            if (activeReclaimJob) activeReclaimJob.running = false;
+            updateFloatingProgressPill();
+            const errLine = `<div class="log-entry log-error"><span>[Error]</span> <span>${err.message || 'Bulk reclaim failed'}</span></div>`;
+            if (activeReclaimJob && activeReclaimJob.logs) activeReclaimJob.logs.push(errLine);
+            if (consoleBody) consoleBody.innerHTML += errLine;
+            if (consoleStatus) consoleStatus.textContent = "Error";
+            showToast(err.message || "Bulk reclaim failed", "error");
+            executeBtn.disabled = false;
+            executeBtn.innerHTML = `${icons.zap} <span>Reclaim Selected Caches</span>`;
+            listContainer.querySelectorAll(".reclaim-checkbox").forEach(cb => {
+              cb.disabled = false;
+            });
+          },
+          (completeData) => {
+            isRunning = false;
+            totalFreed = completeData.total_freed_bytes || totalFreed;
+            const completeLine = `
+              <div class="log-entry log-push" style="margin-top: 0.5rem; font-weight: bold;">
+                <span>✨ Space Recovery Complete. ${formatBytes(totalFreed)} reclaimed across ${completeData.projects_cleaned_count || 0} projects.</span>
+              </div>
+            `;
+            if (activeReclaimJob) {
+              activeReclaimJob.status = "complete";
+              activeReclaimJob.totalFreed = totalFreed;
+              if (activeReclaimJob.logs) activeReclaimJob.logs.push(completeLine);
+              updateFloatingProgressPill();
+              if (activeReclaimJob.onProgress) activeReclaimJob.onProgress(activeReclaimJob);
+              if (activeReclaimJob.onCompleteModal) activeReclaimJob.onCompleteModal(completeData);
+              setTimeout(() => {
+                activeReclaimJob = null;
+                updateFloatingProgressPill();
+              }, 4000);
+            }
+
+            showToast(`⚡ Successfully reclaimed ${formatBytes(totalFreed)}!`, "success");
+
+            executeBtn.style.display = "none";
+            const cancelBtn = container.querySelector("#bulk-reclaim-cancel-btn");
+            if (cancelBtn) {
+              cancelBtn.textContent = "Done";
+              cancelBtn.classList.remove("btn-secondary");
+              cancelBtn.classList.add("btn-primary");
+            }
+
+            if (onReclaimed) onReclaimed(completeData);
+          }
+        );
+      } catch (err) {
+        // Fallback to direct REST POST
+        try {
+          const result = await api.reclaimBulk({ project_slugs: selectedSlugs });
+          const totalFreedRes = result.total_freed_bytes || 0;
           consoleBody.innerHTML += `
-            <div class="log-entry log-purge">
-              <span>[Reclaimed]</span>
-              <span>${entry.project} / ${entry.folder} &rarr; Freed ${formatBytes(entry.freed_bytes || 0)}</span>
+            <div class="log-entry log-push" style="margin-top: 0.5rem; font-weight: bold;">
+              <span>✨ Space Recovery Complete. ${formatBytes(totalFreedRes)} reclaimed across ${result.projects_cleaned_count || 0} projects.</span>
             </div>
           `;
-        });
-      } else {
-        consoleBody.innerHTML += `<div class="log-entry log-info"><span>[Info]</span> <span>No regenerable folders required deletion.</span></div>`;
+          consoleBody.scrollTop = consoleBody.scrollHeight;
+          consoleStatus.textContent = "Finished";
+          showToast(`⚡ Successfully reclaimed ${formatBytes(totalFreedRes)}!`, "success");
+          activeReclaimJob = null;
+          updateFloatingProgressPill();
+
+          executeBtn.style.display = "none";
+          const cancelBtn = container.querySelector("#bulk-reclaim-cancel-btn");
+          if (cancelBtn) {
+            cancelBtn.textContent = "Done";
+            cancelBtn.classList.remove("btn-secondary");
+            cancelBtn.classList.add("btn-primary");
+          }
+          if (onReclaimed) onReclaimed(result);
+        } catch (fallbackErr) {
+          consoleBody.innerHTML += `<div class="log-entry log-error"><span>[Error]</span> <span>${fallbackErr.message || 'Bulk reclaim failed'}</span></div>`;
+          consoleStatus.textContent = "Error";
+          showToast(fallbackErr.message || "Bulk reclaim failed", "error");
+          executeBtn.disabled = false;
+          executeBtn.innerHTML = `${icons.zap} <span>Reclaim Selected Caches</span>`;
+        }
       }
-
-      const totalFreed = result.total_freed_bytes || 0;
-      consoleBody.innerHTML += `
-        <div class="log-entry log-push" style="margin-top: 0.5rem; font-weight: bold;">
-          <span>✨ Space Recovery Complete. ${formatBytes(totalFreed)} reclaimed across ${result.projects_cleaned_count || 0} projects.</span>
-        </div>
-      `;
-      consoleBody.scrollTop = consoleBody.scrollHeight;
-      consoleStatus.textContent = "Finished";
-
-      showToast(`⚡ Successfully reclaimed ${formatBytes(totalFreed)}!`, "success");
-
-      executeBtn.style.display = "none";
-      const cancelBtn = container.querySelector("#bulk-reclaim-cancel-btn");
-      if (cancelBtn) {
-        cancelBtn.textContent = "Done";
-        cancelBtn.classList.remove("btn-secondary");
-        cancelBtn.classList.add("btn-primary");
-      }
-
-      if (onReclaimed) onReclaimed(result);
-    } catch (err) {
-      consoleBody.innerHTML += `<div class="log-entry log-error"><span>[Error]</span> <span>${err.message || 'Bulk reclaim failed'}</span></div>`;
-      consoleStatus.textContent = "Error";
-      showToast(err.message || "Bulk reclaim failed", "error");
-      executeBtn.disabled = false;
-      executeBtn.innerHTML = `${icons.zap} <span>Reclaim Selected Caches</span>`;
-    }
-  });
+    });
 
   renderTabContent();
 }

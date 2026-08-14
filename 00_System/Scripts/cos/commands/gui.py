@@ -113,21 +113,40 @@ def cmd_gui(args: argparse.Namespace) -> None:
         return
 
     url = f"http://{args.host}:{args.port}"
+    from ..launcher import is_server_running
+
+    if is_server_running(args.host, args.port):
+        console.print(
+            Panel.fit(
+                f"[bold cyan]CreativeOS Web GUI[/bold cyan] [dim]v{__version__}[/dim]\n\n"
+                f"Server is [bold green]already running[/bold green] at: [bold green]{url}[/bold green]\n"
+                f"API documentation: [dim]{url}/docs[/dim]\n\n"
+                f"[dim]Opening browser...[/dim]",
+                title="✨ CreativeOS GUI",
+                border_style="cyan",
+                padding=(1, 2),
+            )
+        )
+        if not args.no_browser:
+            import webbrowser
+            webbrowser.open(url)
+        return
+
     logger.info(f"Starting CreativeOS GUI at {url}")
 
-    console.print(
-        Panel.fit(
-            f"[bold cyan]CreativeOS Web GUI[/bold cyan] [dim]v{__version__}[/dim]\n\n"
-            f"Server running at: [bold green]{url}[/bold green]\n"
-            f"API documentation: [dim]{url}/docs[/dim]\n\n"
-            f"[dim]Press [bold]Ctrl+C[/bold] to stop the server.[/dim]",
-            title="✨ CreativeOS GUI",
-            border_style="cyan",
-            padding=(1, 2),
-        )
-    )
-
     if not args.no_browser:
+        console.print(
+            Panel.fit(
+                f"[bold cyan]CreativeOS Web GUI[/bold cyan] [dim]v{__version__}[/dim]\n\n"
+                f"Server running at: [bold green]{url}[/bold green]\n"
+                f"API documentation: [dim]{url}/docs[/dim]\n\n"
+                f"[dim]Press [bold]Ctrl+C[/bold] to stop the server.[/dim]",
+                title="✨ CreativeOS GUI",
+                border_style="cyan",
+                padding=(1, 2),
+            )
+        )
+
         def _open_browser():
             time.sleep(0.8)
             try:
@@ -138,13 +157,15 @@ def cmd_gui(args: argparse.Namespace) -> None:
         browser_thread = threading.Thread(target=_open_browser, daemon=True)
         browser_thread.start()
 
+    log_level = "warning" if args.no_browser else "info"
+
     try:
         uvicorn.run(
             "cos.api:app",
             host=args.host,
             port=args.port,
             reload=args.reload,
-            log_level="info",
+            log_level=log_level,
         )
     except KeyboardInterrupt:
         console.print("\n[yellow]GUI server stopped.[/yellow]")

@@ -44,6 +44,7 @@ from .category_config import (
 from .storage import (
     DEFAULT_STALE_DAYS,
     _created_date,
+    _recalculate_totals,
     build_storage_index,
     discover_projects,
     find_project_reclaimable_dirs,
@@ -53,7 +54,10 @@ from .storage import (
     reclaim_project_space,
     refresh_storage_index,
     remove_project_from_storage_index,
+    save_storage_index,
     stale_projects,
+    stream_reclaim_bulk,
+    stream_reclaim_project,
     update_project_in_storage_index,
 )
 from .security import sanitize_path_input, validate_client_name
@@ -128,7 +132,7 @@ def _check_path_allowed(target_path: str | Path) -> Path:
 def _find_project_dir(project_name: str, search_root: str | None = None) -> tuple[Path, dict[str, Any]]:
     """Locate a project directory and its metadata by slug, name, or relative path."""
     root = search_root or PROJECTS_PATH
-    search_name = project_name.lower().strip()
+    search_name = project_name.lower().strip().replace("/", "\\")
 
     # 1. Direct subpath check
     candidate = Path(root) / project_name
@@ -139,7 +143,44 @@ def _find_project_dir(project_name: str, search_root: str | None = None) -> tupl
         except Exception:
             pass
 
-    # 2. Search through discovered projects
+    # 2. Fast lookup from in-memory storage index (sub-millisecond)
+    index = load_storage_index(projects_path=root)
+    if index:
+        for p in index.get("projects", []):
+            p_name = (p.get("name") or "").lower()
+            p_slug = (p.get("slug") or "").lower()
+            p_path = str(p.get("path") or "").lower().replace("/", "\\")
+            p_rel = str(p.get("relative_path") or "").lower().replace("/", "\\")
+            p_dir = Path(p.get("path") or "").name.lower()
+
+            if (
+                search_name == p_name
+                or search_name == p_slug
+                or search_name == p_dir
+                or search_name == p_rel
+                or search_name in p_path
+                or search_name in p_rel
+                or search_name in p_name
+                or p_name in search_name
+                or (search_name.replace("-", "_") in p_slug.replace("-", "_"))
+            ):
+                proj_path = Path(p["path"])
+                meta = {
+                    "name": p.get("name", proj_path.name),
+                    "slug": p.get("slug", proj_path.name),
+                    "type": p.get("type", "Unknown"),
+                    "path": str(proj_path),
+                }
+                meta_file = proj_path / ".project_meta.json"
+                if meta_file.is_file():
+                    try:
+                        with open(meta_file, "r", encoding="utf-8-sig") as f:
+                            meta = json.load(f)
+                    except Exception:
+                        pass
+                return proj_path, meta
+
+    # 3. Search through discovered projects
     discovered = discover_projects(root)
     for proj_path, meta in discovered:
         p_name = (meta.get("name") or "").lower()
@@ -153,7 +194,7 @@ def _find_project_dir(project_name: str, search_root: str | None = None) -> tupl
         if search_name in (p_name, p_slug, p_dir, p_rel):
             return proj_path, meta
 
-    # 3. Partial match fallback
+    # 4. Partial match fallback
     for proj_path, meta in discovered:
         p_name = (meta.get("name") or "").lower()
         p_slug = (meta.get("slug") or "").lower()
@@ -1054,12 +1095,65 @@ def refresh_storage() -> dict[str, Any]:
 
 
 @app.get("/api/storage/reclaimable")
-def get_reclaimable(project: str) -> dict[str, Any]:
-    """Inspect detailed reclaimable cache and dependency folders for a project."""
+def get_reclaimable(project: str, force_refresh: bool = False) -> dict[str, Any]:
+    """Inspect detailed reclaimable cache and dependency folders for a project with 0ms instant cached fallback."""
     proj_path, meta = _find_project_dir(project)
+
+    # 1. Fast precomputed cache lookup from storage index if non-empty items exist
+    if not force_refresh:
+        index = load_storage_index(projects_path=PROJECTS_PATH)
+        if index:
+            proj_str = str(proj_path.resolve()).lower().replace("/", "\\")
+            proj_name = meta.get("name", proj_path.name).lower()
+            proj_slug = meta.get("slug", proj_path.name).lower()
+            matched = next(
+                (
+                    p for p in index.get("projects", [])
+                    if str(Path(p.get("path", "")).resolve()).lower().replace("/", "\\") == proj_str
+                    or p.get("slug", "").lower() == proj_slug
+                    or p.get("name", "").lower() == proj_name
+                ),
+                None,
+            )
+            if matched and matched.get("reclaimable_items"):
+                items = matched["reclaimable_items"]
+                total_reclaimable = sum(it.get("size", 0) for it in items)
+                total_files = sum(it.get("file_count", 0) for it in items)
+                return {
+                    "status": "success",
+                    "project": meta.get("name", proj_path.name),
+                    "slug": meta.get("slug", proj_path.name),
+                    "path": str(proj_path),
+                    "total_reclaimable": total_reclaimable,
+                    "total_files": total_files,
+                    "items": items,
+                    "cached": True,
+                }
+
+    # 2. Live fast scan fallback
     items = find_project_reclaimable_dirs(proj_path)
     total_reclaimable = sum(it.get("size", 0) for it in items)
     total_files = sum(it.get("file_count", 0) for it in items)
+
+    # Update index cache in-memory for next time
+    index = load_storage_index(projects_path=PROJECTS_PATH)
+    if index:
+        proj_str = str(proj_path.resolve()).lower().replace("/", "\\")
+        proj_name = meta.get("name", proj_path.name).lower()
+        proj_slug = meta.get("slug", proj_path.name).lower()
+        for p in index.get("projects", []):
+            if (
+                str(Path(p.get("path", "")).resolve()).lower().replace("/", "\\") == proj_str
+                or p.get("slug", "").lower() == proj_slug
+                or p.get("name", "").lower() == proj_name
+            ):
+                if p.get("reclaimable_items") != items:
+                    p["reclaimable_items"] = items
+                    p["reclaimable_size"] = total_reclaimable
+                    _recalculate_totals(index)
+                    save_storage_index(index)
+                break
+
     return {
         "status": "success",
         "project": meta.get("name", proj_path.name),
@@ -1068,6 +1162,7 @@ def get_reclaimable(project: str) -> dict[str, Any]:
         "total_reclaimable": total_reclaimable,
         "total_files": total_files,
         "items": items,
+        "cached": False,
     }
 
 
@@ -1096,6 +1191,41 @@ def reclaim_bulk(req: ReclaimBulkRequest) -> dict[str, Any]:
     )
     _invalidate_server_cache()
     return result
+
+
+@app.get("/api/storage/reclaim/stream")
+def reclaim_stream_endpoint(
+    project: str | None = None,
+    targets: str | None = None,
+    slugs: str | None = None,
+    stale_only: bool = False,
+    days: int = DEFAULT_STALE_DAYS,
+) -> StreamingResponse:
+    """Stream real-time Server-Sent Events (SSE) for single or bulk project reclaim."""
+    def sse_generator():
+        try:
+            if project:
+                proj_path, _ = _find_project_dir(project)
+                target_list = [t.strip() for t in targets.split(",")] if targets else None
+                for event in stream_reclaim_project(proj_path, target_subdirs=target_list):
+                    yield f"data: {json.dumps(event)}\n\n"
+            else:
+                slug_list = [s.strip() for s in slugs.split(",")] if slugs else None
+                for event in stream_reclaim_bulk(stale_only=stale_only, days=days, project_paths=slug_list):
+                    yield f"data: {json.dumps(event)}\n\n"
+        except Exception as err:
+            logger.error(f"Error during SSE reclaim stream: {err}")
+            yield f"data: {json.dumps({'event': 'error', 'message': str(err)})}\n\n"
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _load_template_structures() -> dict[str, Any]:

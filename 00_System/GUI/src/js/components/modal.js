@@ -128,13 +128,116 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
   let currentProject = { ...project };
   let isEditMode = false;
+  let realEntries = null;
+  let isLoadingStructure = true;
+
+  function renderStructureContent() {
+    const cat = currentProject.type || "Video";
+    const catInfo = categoryConfig[cat] || {};
+    const tStruct = catInfo.template_structure || {};
+    const templateFolders = Object.keys(tStruct).length > 0
+      ? Object.keys(tStruct)
+      : (catInfo.folder_structure || ["00_Notes", "01_Footage", "02_Audio", "03_Exports"]);
+    const templateSet = new Set(templateFolders);
+
+    let nodes = [];
+    let presentBlueprintCount = 0;
+    let customCount = 0;
+    let missingCount = 0;
+    let totalFolders = 0;
+
+    if (realEntries === null) {
+      // Initial blueprint fallback while live scan is running
+      nodes = templateFolders.map(f => ({ name: f, status: "template", exists: true }));
+      presentBlueprintCount = templateFolders.length;
+      totalFolders = templateFolders.length;
+    } else {
+      const diskDirs = realEntries.filter(e => e.is_dir);
+      const diskDirMap = new Map(diskDirs.map(d => [d.name, d]));
+      totalFolders = diskDirs.length;
+
+      // 1. Template folders on disk
+      templateFolders.forEach(f => {
+        if (diskDirMap.has(f)) {
+          nodes.push({ name: f, status: "template", exists: true });
+          presentBlueprintCount++;
+        }
+      });
+
+      // 2. Custom user-added folders on disk
+      diskDirs.forEach(d => {
+        if (!templateSet.has(d.name)) {
+          nodes.push({ name: d.name, status: "custom", exists: true });
+          customCount++;
+        }
+      });
+
+      // 3. Missing blueprint folders
+      templateFolders.forEach(f => {
+        if (!diskDirMap.has(f)) {
+          nodes.push({ name: f, status: "missing", exists: false });
+          missingCount++;
+        }
+      });
+    }
+
+    return `
+      <div class="modal-section-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.45rem;">
+          <h4 class="modal-section-heading" style="margin-bottom: 0;">Directory Structure</h4>
+          <span class="folder-count-tag font-mono">${totalFolders} folder${totalFolders === 1 ? '' : 's'}</span>
+          ${isLoadingStructure ? `<span class="spinner" style="width: 11px; height: 11px; border-width: 2px;"></span>` : ''}
+        </div>
+        <div class="structure-legend-pills font-mono">
+          <span class="legend-pill legend-template" title="Standard folders created from category template">
+            Template (${presentBlueprintCount})
+          </span>
+          <span class="legend-pill legend-custom" title="Custom folders created by user">
+            + Custom (${customCount})
+          </span>
+          ${missingCount > 0 ? `
+            <span class="legend-pill legend-missing" title="Template folders not found on disk">
+              Missing (${missingCount})
+            </span>
+          ` : ''}
+        </div>
+      </div>
+      <div class="folder-tree-view">
+        <div class="tree-root">
+          <span class="tree-icon">${icons.folder}</span>
+          <strong>${currentProject.slug || currentProject.name}</strong>
+        </div>
+        <div class="tree-branches">
+          ${nodes.map((node, idx) => `
+            <div class="tree-node ${node.status === 'missing' ? 'is-missing-node' : ''}">
+              <span class="tree-line">${idx === nodes.length - 1 ? '└─' : '├─'}</span>
+              <span class="tree-folder-icon">${icons.folder}</span>
+              <span class="tree-name font-mono ${node.name === '00_Notes' ? 'notes-highlight' : ''}" title="${node.name}">${node.name}</span>
+              
+              ${node.status === 'template' ? `
+                <span class="tree-badge-blueprint font-mono">Template</span>
+                ${node.name === '00_Notes' ? '<span class="tree-badge-obsidian font-mono">Obsidian Vault</span>' : ''}
+              ` : node.status === 'custom' ? `
+                <span class="tree-badge-custom font-mono">+ Custom</span>
+              ` : `
+                <span class="tree-badge-missing font-mono">Missing from template</span>
+              `}
+            </div>
+          `).join("")}
+          <div class="tree-node">
+            <span class="tree-line">└─</span>
+            <span class="tree-file-icon">${icons.file}</span>
+            <span class="tree-name font-mono">.project_meta.json</span>
+            <span class="tree-badge-system font-mono">System</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
   function renderModal() {
     const isStale = currentProject.is_stale || currentProject.status === "stale";
     const cat = currentProject.type || "Video";
-    const catInfo = categoryConfig[cat] || {};
-    const tStruct = catInfo.template_structure || {};
-    const folderTree = Object.keys(tStruct).length > 0 ? Object.keys(tStruct) : (catInfo.folder_structure || ["00_Notes", "01_Footage", "02_Audio", "03_Exports"]);
 
     const fullPath = currentProject.path || "";
     const relPath = currentProject.relative_path || currentProject.slug || "";
@@ -188,68 +291,61 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                     </div>
                   </div>
 
-                  <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.65rem;">
+                  <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem;">
                     <div class="form-group">
                       <label class="form-label" for="edit-project-category">Category</label>
-                      <select id="edit-project-category" class="studio-select" style="width: 100%;">
-                        ${Object.keys(categoryConfig).map(c => `
-                          <option value="${c}" ${c.toLowerCase() === (currentProject.type || '').toLowerCase() ? 'selected' : ''}>${c}</option>
+                      <select id="edit-project-category" class="form-select">
+                        ${Object.keys(categoryConfig).map(k => `
+                          <option value="${k}" ${k === cat ? 'selected' : ''}>${k}</option>
                         `).join("")}
                       </select>
                     </div>
 
                     <div class="form-group">
-                      <label class="form-label" for="edit-project-tags">Tags</label>
-                      <input type="text" id="edit-project-tags" class="form-input font-mono" value="${(currentProject.tags || []).join(', ')}" placeholder="e.g. promo, 4k" />
+                      <label class="form-label" for="edit-project-status">Activity Status</label>
+                      <select id="edit-project-status" class="form-select">
+                        <option value="active" ${!isStale ? 'selected' : ''}>Active Project</option>
+                        <option value="stale" ${isStale ? 'selected' : ''}>Stale (Inactive)</option>
+                      </select>
                     </div>
                   </div>
 
-                  <div class="form-group" style="margin-top: 0.65rem;">
+                  <div class="form-group" style="margin-top: 0.75rem;">
                     <label class="form-label" for="edit-project-desc">Description</label>
                     <textarea id="edit-project-desc" class="form-textarea" rows="2" placeholder="Brief project summary...">${currentProject.description || ''}</textarea>
                   </div>
 
-                  <!-- Filesystem Move / Rename Toggle -->
-                  <div class="form-group" style="margin-top: 0.75rem; padding: 0.65rem 0.85rem; border-radius: var(--radius-md); background-color: var(--badge-bg); border: 1px solid var(--border-subtle);">
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; user-select: none;">
-                      <input type="checkbox" id="edit-sync-filesystem" style="accent-color: var(--color-primary); cursor: pointer; width: 15px; height: 15px;" />
-                      <span style="font-weight: 600; font-size: 0.8rem; color: var(--text-primary);">Sync physical folder name on disk</span>
-                    </label>
-                    <div id="fs-sync-preview-box" class="font-mono" style="margin-top: 0.45rem; font-size: 0.7rem; color: var(--text-muted);">
-                      <span id="fs-sync-preview-msg">Folder on disk remains unchanged.</span>
-                    </div>
+                  <div class="form-group" style="margin-top: 0.75rem;">
+                    <label class="form-label" for="edit-project-tags">Tags (comma separated)</label>
+                    <input type="text" id="edit-project-tags" class="form-input font-mono" value="${Array.isArray(currentProject.tags) ? currentProject.tags.join(', ') : (currentProject.tags || '')}" placeholder="youtube, edit, client, v1" />
                   </div>
 
-                  <div style="display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 0.85rem;">
-                    <button type="button" class="btn btn-secondary" id="cancel-edit-btn">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="save-metadata-btn">
-                      ${icons.check} Save Changes
+                  <div class="form-actions" style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" id="edit-cancel-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="edit-save-btn">
+                      ${icons.save || icons.check}
+                      Save Changes
                     </button>
                   </div>
                 </form>
               </div>
             ` : `
-              <!-- Single Surface Metrics Strip -->
-              <div class="modal-metrics-grid font-mono">
+              <!-- Read-only Metrics Grid (3 stats) -->
+              <div class="modal-metrics-grid">
                 <div class="modal-metric-card">
-                  <span class="metric-label">Footprint</span>
+                  <span class="metric-label">Total Size</span>
                   <span class="metric-val">${formatBytes(currentProject.total_size || 0)}</span>
-                  <span class="metric-sub">${currentProject.file_count || 0} files</span>
+                  <span class="metric-sub">${currentProject.file_count !== undefined ? `${currentProject.file_count} files` : 'Workspace footprint'}</span>
                 </div>
                 <div class="modal-metric-card">
                   <span class="metric-label">Media</span>
                   <span class="metric-val" style="color: var(--color-accent-cyan);">${formatBytes(currentProject.media_size || 0)}</span>
                   <span class="metric-sub">RAW &amp; Audio</span>
                 </div>
-                <div class="modal-metric-card ${(currentProject.reclaimable_size || 0) > 0 ? 'is-actionable-reclaim' : ''}" id="modal-metric-reclaim-card" title="${(currentProject.reclaimable_size || 0) > 0 ? 'Click to inspect & clean cache files' : 'No regenerable cache detected'}">
-                  <div class="metric-top-row">
-                    <span class="metric-label">Reclaimable</span>
-                    ${(currentProject.reclaimable_size || 0) > 0 ? `
-                      <span class="metric-clean-pill font-mono" id="modal-reclaim-pill">${icons.zap} Clean</span>
-                    ` : ''}
-                  </div>
+                <div class="modal-metric-card">
+                  <span class="metric-label">Reclaimable</span>
                   <span class="metric-val" style="color: ${(currentProject.reclaimable_size || 0) > 0 ? 'var(--color-warning)' : 'var(--text-dim)'};">${formatBytes(currentProject.reclaimable_size || 0)}</span>
-                  <span class="metric-sub">${(currentProject.reclaimable_size || 0) > 0 ? 'Click to free space' : 'Caches'}</span>
+                  <span class="metric-sub">Caches &amp; Trash</span>
                 </div>
               </div>
 
@@ -298,7 +394,7 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
               </div>
             </div>
 
-            <!-- Workspace Actions Strip (4-column balanced grid) -->
+            <!-- Workspace Actions Strip -->
             <div class="modal-section">
               <h4 class="modal-section-heading">Actions</h4>
               <div class="workspace-actions-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
@@ -318,36 +414,18 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                   ${icons.archive}
                   Archive
                 </button>
+                ${(currentProject.reclaimable_size || 0) > 0 ? `
+                  <button class="btn btn-secondary action-btn-reclaim" id="modal-reclaim-btn" style="color: var(--color-warning); font-size: 0.785rem; padding: 0.4rem 0.65rem;" title="Clean Dependencies & Caches">
+                    ${icons.zap}
+                    Reclaim (${formatBytes(currentProject.reclaimable_size)})
+                  </button>
+                ` : ''}
               </div>
             </div>
 
-            <!-- Blueprint Structure -->
-            <div class="modal-section">
-              <div class="modal-section-header">
-                <h4 class="modal-section-heading">Directory Structure</h4>
-                <span class="folder-count-tag font-mono">${folderTree.length} subfolders</span>
-              </div>
-              <div class="folder-tree-view">
-                <div class="tree-root">
-                  <span class="tree-icon">${icons.folder}</span>
-                  <strong>${currentProject.slug || currentProject.name}</strong>
-                </div>
-                <div class="tree-branches">
-                  ${folderTree.map((f, idx) => `
-                    <div class="tree-node">
-                      <span class="tree-line">${idx === folderTree.length - 1 ? '└─' : '├─'}</span>
-                      <span class="tree-folder-icon">${icons.folder}</span>
-                      <span class="tree-name ${f === '00_Notes' ? 'notes-highlight' : ''}">${f}</span>
-                      ${f === '00_Notes' ? '<span class="tree-tag-obsidian">Obsidian</span>' : ''}
-                    </div>
-                  `).join("")}
-                  <div class="tree-node">
-                    <span class="tree-line">└─</span>
-                    <span class="tree-file-icon">${icons.file}</span>
-                    <span class="tree-name font-mono">meta.json</span>
-                  </div>
-                </div>
-              </div>
+            <!-- Live Differentiated Blueprint Structure -->
+            <div class="modal-section" id="modal-structure-container">
+              ${renderStructureContent()}
             </div>
           </div>
 
@@ -367,6 +445,24 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
 
     // Reattach Event Handlers
     attachModalHandlers();
+  }
+
+  // Asynchronously scan real live directory structure
+  if (currentProject.path) {
+    api.listFiles(currentProject.path).then(res => {
+      realEntries = res.entries || [];
+      isLoadingStructure = false;
+      const structureEl = document.getElementById("modal-structure-container");
+      if (structureEl) {
+        structureEl.innerHTML = renderStructureContent();
+      }
+    }).catch(() => {
+      isLoadingStructure = false;
+      const structureEl = document.getElementById("modal-structure-container");
+      if (structureEl) {
+        structureEl.innerHTML = renderStructureContent();
+      }
+    });
   }
 
   function closeModal() {
