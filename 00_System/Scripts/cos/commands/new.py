@@ -144,138 +144,183 @@ Use 'cos category list' to see all available categories and their templates.\
         help="Show this help message and exit.",
     )
 
-def cmd_new(args: argparse.Namespace) -> None:
-    """Create a new project."""
-    logger.info(f"Creating new project: {args.name} (category: {args.category})")
-    try:
-        project_name = sanitize_path_input(args.name)
-    except ValueError as e:
-        console.print(f"[error]❌ Invalid project name: {e}[/error]")
-        return
-        
-    category = args.category.title()
-    date_prefix = get_date_slug(args.date)
+
+def create_project_structure(
+    name: str,
+    category: str = "Video",
+    client: str | None = None,
+    destination_subpath: str | None = None,
+    date: str | None = None,
+    simple: bool = False,
+    git: bool = False,
+    target_root_override: str | None = None,
+    interactive: bool = False,
+) -> dict[str, Any]:
+    """Programmatically create a new project directory and metadata.
+    
+    Returns:
+        dict containing project metadata.
+    Raises:
+        ValueError: if project name or client name is invalid.
+        FileExistsError: if target directory already exists.
+        FileNotFoundError: if template structure is missing.
+    """
+    project_name = sanitize_path_input(name)
+    resolved_category = validate_category(category)
+    date_prefix = get_date_slug(date)
     safe_name = project_name.replace(" ", "_")
     slug = f"{date_prefix}_{safe_name}"
 
-    cwd = os.getcwd()
-    target_root = None
-    
-    if args.client:
-        try:
-            sanitized_client = sanitize_path_input(args.client, max_length=50)
-        except ValueError as e:
-            console.print(f"[error]❌ Invalid client name: {e}[/error]")
-            return
-        
-        target_root = os.path.join(PROJECTS_PATH, "Clients", sanitized_client)
-        if not os.path.exists(target_root):
-            os.makedirs(target_root)
-            console.print(f"[success]✨ Created new Client folder: {sanitized_client}[/success]")
-    elif cwd.startswith(PROJECTS_PATH):
-        target_root = cwd
+    if client:
+        sanitized_client = sanitize_path_input(client, max_length=50)
+        base_root = os.path.join(PROJECTS_PATH, "Clients", sanitized_client)
     else:
-        # Use dynamic category folder from configuration
-        phys_cat = get_category_folder(category)
-        target_root = os.path.join(PROJECTS_PATH, phys_cat)
+        phys_cat = get_category_folder(resolved_category)
+        base_root = os.path.join(PROJECTS_PATH, phys_cat)
 
-    if not os.path.exists(target_root):
-        os.makedirs(target_root)
-        console.print(f"[success]✨ Created category folder: {os.path.basename(target_root)}[/success]")
+    if target_root_override:
+        target_root = target_root_override
+    elif destination_subpath:
+        sub_parts = [sanitize_path_input(p) for p in destination_subpath.strip().replace("\\", "/").split("/") if p.strip()]
+        target_root = os.path.join(base_root, *sub_parts) if sub_parts else base_root
+    else:
+        target_root = base_root
 
+    os.makedirs(target_root, exist_ok=True)
     target_dir = os.path.join(target_root, slug)
-    
-    info_table = Table(show_header=False, box=box.SIMPLE)
-    info_table.add_row("Project Name", f"[project]{project_name}[/project]")
-    info_table.add_row("Slug", slug)
-    info_table.add_row("Category", category)
-    info_table.add_row("Location", format_path(target_dir))
-    if args.client: info_table.add_row("Client", args.client)
-    
-    console.print(Panel(info_table, title="🚀 Launching New Project", border_style="purple"))
 
     if os.path.exists(target_dir):
-        console.print(f"[warning]⚠️  Project already exists: {target_dir}[/warning]")
-        return
+        raise FileExistsError(f"Project already exists: {target_dir}")
 
-    # Use dynamic template from configuration
-    if args.simple:
+    if simple:
         template_name = get_simple_template()
     else:
-        template_name = get_category_template(category)
+        template_name = get_category_template(resolved_category)
 
     template_dir = os.path.join(TEMPLATES_PATH, template_name)
     template_file = os.path.join(template_dir, "structure.json")
     if not os.path.exists(template_file):
-        console.print(f"[error]❌ Template not found: {template_name}[/error]")
+        raise FileNotFoundError(f"Template structure not found: {template_name}")
+
+    with open(template_file, "r", encoding="utf-8") as f:
+        structure = json.load(f)
+
+    os.makedirs(target_dir, exist_ok=True)
+
+    meta_client = "None"
+    if client:
+        meta_client = client
+    else:
+        norm_path = target_root.replace("\\", "/")
+        parts = norm_path.split("/")
+        if "Clients" in parts:
+            try:
+                meta_client = parts[parts.index("Clients") + 1]
+            except Exception:
+                pass
+        elif "Video" in parts:
+            try:
+                if len(parts) > parts.index("Video") + 1:
+                    meta_client = parts[parts.index("Video") + 1]
+            except Exception:
+                pass
+
+    for folder, contents in structure.items():
+        folder_path = os.path.join(target_dir, folder)
+        os.makedirs(folder_path, exist_ok=True)
+        for item in contents:
+            if "." in item:
+                item_target = os.path.join(folder_path, item)
+                if not os.path.exists(item_target):
+                    source_file = os.path.join(template_dir, folder, item)
+                    if os.path.exists(source_file):
+                        import shutil
+                        shutil.copy2(source_file, item_target)
+                    else:
+                        with open(item_target, "w", encoding="utf-8") as f:
+                            f.write(f"# {item}\nProject: {project_name}\nCreated: {date_prefix}\n")
+            else:
+                os.makedirs(os.path.join(folder_path, item), exist_ok=True)
+
+    _apply_template_variables(target_dir, project_name, resolved_category, client or "")
+
+    notes_dir = os.path.join(target_dir, "00_Notes")
+    os.makedirs(notes_dir, exist_ok=True)
+    with open(os.path.join(notes_dir, "Idea.md"), "w", encoding="utf-8") as f:
+        f.write(
+            f"---\n"
+            f"type: project\n"
+            f"category: {resolved_category}\n"
+            f"client: {meta_client}\n"
+            f"status: active\n"
+            f"created: {date_prefix}\n"
+            f"tags: [creativeos]\n"
+            f"---\n\n"
+            f"# {project_name}\n"
+        )
+
+    meta = {
+        "name": project_name,
+        "slug": slug,
+        "type": resolved_category,
+        "created": date_prefix,
+        "client": meta_client,
+        "template": template_name,
+        "root": target_dir,
+    }
+    with open(os.path.join(target_dir, ".project_meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=4)
+
+    meta_path = os.path.join(target_dir, ".project_meta.json")
+    try:
+        os.chmod(meta_path, CONFIG_PERMISSIONS)
+    except OSError:
+        pass
+
+    if git:
+        setup_git(target_dir, resolved_category, interactive=interactive)
+
+    logger.debug(f"Project created at: {target_dir}")
+    meta["path"] = target_dir
+    return meta
+
+
+def cmd_new(args: argparse.Namespace) -> None:
+    """Create a new project."""
+    logger.info(f"Creating new project: {args.name} (category: {args.category})")
+    
+    cwd = os.getcwd()
+    target_root_override = cwd if cwd.startswith(PROJECTS_PATH) else None
+
+    try:
+        meta = create_project_structure(
+            name=args.name,
+            category=args.category,
+            client=args.client,
+            date=args.date,
+            simple=args.simple,
+            git=args.git,
+            target_root_override=target_root_override,
+            interactive=True,
+        )
+    except ValueError as e:
+        console.print(f"[error]❌ Invalid input: {e}[/error]")
+        return
+    except FileExistsError as e:
+        console.print(f"[warning]⚠️  {e}[/warning]")
+        return
+    except FileNotFoundError as e:
+        console.print(f"[error]❌ {e}[/error]")
         return
 
-    with open(template_file, "r") as f: structure = json.load(f)
+    info_table = Table(show_header=False, box=box.SIMPLE)
+    info_table.add_row("Project Name", f"[project]{meta['name']}[/project]")
+    info_table.add_row("Slug", meta["slug"])
+    info_table.add_row("Category", meta["type"])
+    info_table.add_row("Location", format_path(meta["root"]))
+    if meta.get("client") and meta["client"] != "None":
+        info_table.add_row("Client", meta["client"])
 
-    with console.status(f"[bold cyan]Construction in progress ({template_name})...[/bold cyan]"):
-        os.makedirs(target_dir)
+    console.print(Panel(info_table, title="🚀 Launching New Project", border_style="purple"))
+    console.print(Panel(f"Project successfully spawned at:\n{format_path(meta['root'])}", style="bold green", title="✅ Success"))
 
-        meta_client = "None"
-        if args.client: meta_client = args.client
-        else:
-            norm_path = target_root.replace("\\", "/")
-            parts = norm_path.split("/")
-            if "Clients" in parts:
-                try: meta_client = parts[parts.index("Clients") + 1]
-                except: pass
-            elif "Video" in parts:
-                 try:
-                     if len(parts) > parts.index("Video") + 1: meta_client = parts[parts.index("Video") + 1]
-                 except: pass
-
-        for folder, contents in structure.items():
-            folder_path = os.path.join(target_dir, folder)
-            os.makedirs(folder_path, exist_ok=True)
-            for item in contents:
-                if "." in item:
-                    item_target = os.path.join(folder_path, item)
-                    if not os.path.exists(item_target):
-                        # Try to copy from template directory if it exists
-                        source_file = os.path.join(template_dir, folder, item)
-                        if os.path.exists(source_file):
-                            import shutil
-                            shutil.copy2(source_file, item_target)
-                        else:
-                            with open(item_target, "w") as f:
-                                f.write(f"# {item}\nProject: {project_name}\nCreated: {date_prefix}\n")
-                else: os.makedirs(os.path.join(folder_path, item), exist_ok=True)
-
-        _apply_template_variables(target_dir, project_name, category, args.client)
-
-        notes_dir = os.path.join(target_dir, "00_Notes")
-        os.makedirs(notes_dir, exist_ok=True)
-        with open(os.path.join(notes_dir, "Idea.md"), "w") as f:
-            f.write(f"---\n"
-                    f"type: project\n"
-                    f"category: {category}\n"
-                    f"client: {meta_client}\n"
-                    f"status: active\n"
-                    f"created: {date_prefix}\n"
-                    f"tags: [creativeos]\n"
-                    f"---\n\n"
-                    f"# {project_name}\n")
-
-        meta = {
-            "name": project_name, "slug": slug, "type": category,
-            "created": date_prefix, "client": meta_client,
-            "template": template_name, "root": target_dir
-        }
-        with open(os.path.join(target_dir, ".project_meta.json"), "w") as f:
-            json.dump(meta, f, indent=4)
-            
-        meta_path = os.path.join(target_dir, ".project_meta.json")
-        try:
-            os.chmod(meta_path, CONFIG_PERMISSIONS)
-        except OSError:
-            pass
-
-    if args.git:
-        setup_git(target_dir, category)
-    
-    logger.debug(f"Project created at: {target_dir}")
-    console.print(Panel(f"Project successfully spawned at:\n{format_path(target_dir)}", style="bold green", title="✅ Success"))

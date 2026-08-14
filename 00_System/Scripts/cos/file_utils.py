@@ -1,6 +1,7 @@
 """File system utilities."""
 
 import os
+import sys
 import shutil
 import statistics
 import datetime
@@ -49,53 +50,54 @@ def get_export_month_path() -> str:
 
 def find_meta_in_cwd() -> Tuple[Optional[JSONDict], Optional[str]]:
     """
-    Search upward from current directory for .project_meta.json.
+    Search upward from current directory for .project_meta.json across deep subfolders.
     """
     current = os.getcwd()
-    
-    for _ in range(3):
+
+    # Search upward up to 15 levels to find the project root
+    for _ in range(15):
         meta_path = os.path.join(current, ".project_meta.json")
-        
+
         if os.path.exists(meta_path):
             try:
                 with open(meta_path, "r", encoding="utf-8-sig") as f:
                     meta = json.load(f)
-                
+
                 # Validate metadata structure
                 required_fields = {"name", "slug", "type", "created"}
                 if not required_fields.issubset(meta.keys()):
                     console.print(f"[warning]⚠️  Found metadata but missing required fields: {meta_path}[/warning]")
                     return None, None
-                
+
                 # Validate path is within PROJECTS_PATH
                 try:
                     abs_current = os.path.realpath(current)
                     abs_projects = os.path.realpath(PROJECTS_PATH)
-                    
+
                     if not abs_current.startswith(abs_projects):
                         console.print(f"[warning]⚠️  Found metadata outside projects path: {meta_path}[/warning]")
                         return None, None
                 except Exception:
                     pass  # If path validation fails, continue anyway
-                
+
                 return meta, current
-                
+
             except json.JSONDecodeError:
                 console.print(f"[warning]⚠️  Invalid JSON in metadata: {meta_path}[/warning]")
                 return None, None
             except IOError as e:
                 console.print(f"[warning]⚠️  Cannot read metadata: {e}[/warning]")
                 return None, None
-        
+
         # Move up one directory
         parent = os.path.dirname(current)
-        
-        # Check if we've reached the root (cross-platform)
-        if parent == current:
+
+        # Check if we've reached the root or stopped moving
+        if parent == current or not parent:
             break
-            
+
         current = parent
-    
+
     return None, None
 
 def get_smart_date(path: str) -> float:
@@ -154,22 +156,55 @@ def copy_with_progress(src: str, dst: str) -> None:
             progress.advance(task)
 
 def remove_readonly(func: Any, path: str, excinfo: Any) -> None:
-    """
-    Error handler for shutil.rmtree to remove read-only attribute and retry.
-    """
-    os.chmod(path, stat.S_IWRITE)
-    func(path)
+    """Error handler for shutil.rmtree to remove read-only attribute and retry."""
+    try:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        func(path)
+    except Exception:
+        pass
 
-def robust_rmtree(path: str, retries: int = 5, delay: int = 1) -> bool:
+
+def robust_rmtree(path: str, retries: int = 3, delay: float = 0.5) -> bool:
+    """High-performance, aggressive directory tree removal.
+    
+    On Windows, uses kernel-level native 'rd /s /q' with long path support (\\\\?\\),
+    falling back to Python's shutil.rmtree with read-only permission clearing.
     """
-    Aggressively remove a directory tree, overcoming file locks up to N retries.
-    """
+    norm_path = os.path.normpath(str(path))
+    if not os.path.exists(norm_path):
+        return True
+
     for i in range(retries):
+        # 1. On Windows, try native 'rd /s /q' with \\?\ extended path prefix
+        if sys.platform == "win32":
+            try:
+                win_path = norm_path
+                if not win_path.startswith("\\\\?\\") and len(win_path) >= 3 and win_path[1] == ":":
+                    ext_path = "\\\\?\\" + win_path
+                else:
+                    ext_path = win_path
+
+                subprocess.run(["cmd.exe", "/c", "rd", "/s", "/q", ext_path], capture_output=True, text=True, timeout=30)
+                if not os.path.exists(norm_path):
+                    return True
+            except Exception:
+                pass
+
+        # 2. Fallback to Python shutil.rmtree with robust error handler
         try:
-            shutil.rmtree(path, onerror=remove_readonly)
-            return True
-        except OSError:
-            console.print(f"[warning]Attempt {i+1}/{retries}: Failed to remove {path}. Retrying in {delay}s...[/warning]")
-            time.sleep(delay)
-    console.print(f"[error]❌ Failed to remove directory after {retries} retries: {path}[/error]")
-    return False
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(norm_path, onexc=remove_readonly)
+            else:
+                shutil.rmtree(norm_path, onerror=remove_readonly)
+
+            if not os.path.exists(norm_path):
+                return True
+        except Exception:
+            pass
+
+        time.sleep(delay)
+
+    is_gone = not os.path.exists(norm_path)
+    if not is_gone:
+        console.print(f"[error]❌ Failed to remove directory after {retries} retries: {norm_path}[/error]")
+    return is_gone

@@ -154,21 +154,6 @@
                 "03_Assets",
                 "04_Exports"
             ]
-        },
-        "Client": {
-            "template": "client_project",
-            "physical_folder": "Clients",
-            "aliases": [],
-            "description": "Client-specific projects",
-            "icon": "👥",
-            "enabled": true,
-            "folder_structure": [
-                "00_Notes",
-                "01_Briefs",
-                "02_Work",
-                "03_Deliverables",
-                "04_Communication"
-            ]
         }
     },
     "available_icons": [

@@ -207,6 +207,30 @@ cos resurrect OldProject
 ```
 Restores "OldProject" from the archive to active projects.
 
+### 11. `gui`
+**Description**: Launches the CreativeOS Web Studio dashboard in your browser or desktop app mode.
+
+**Arguments / Options**:
+- `-a`, `--app`: Launch in self-contained standalone desktop app mode.
+- `--install-shortcut`: Automatically compile `CreativeOS.exe` and create Windows Desktop & Start Menu shortcuts.
+- `-p`, `--port`: Custom port (default: 8787).
+- `--no-browser`: Start the server without automatically opening the browser.
+
+**Example**:
+```bash
+cos gui                     # Launch in default browser
+cos gui --app               # Launch in standalone desktop mode
+cos gui --install-shortcut  # Generate taskbar-ready executable & shortcuts
+```
+
+### 12. `app`
+**Description**: Direct alias for `cos gui --app` to run the self-contained desktop app with automated server lifecycle management.
+
+**Example**:
+```bash
+cos app
+```
+
 ## Advanced Topics and Intelligent Behaviors
 ### Smart Date Detection
 The script employs intelligent date inference when creating project metadata. If no explicit creation date is provided, it analyzes the median modification timestamps of all files within the project folder. This approach provides a reasonable approximation of when the project was actually started, based on the collective "age" of its contents, ensuring accurate chronological organization even for projects without explicit date tracking.

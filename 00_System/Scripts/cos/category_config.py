@@ -106,15 +106,6 @@ DEFAULT_CATEGORIES: CategoriesDict = {
         "icon": "📚",
         "enabled": True,
         "folder_structure": ["00_Notes", "01_Scripts", "02_Footage", "03_Assets", "04_Exports"]
-    },
-    "Client": {
-        "template": "client_project",
-        "physical_folder": "Clients",
-        "aliases": [],
-        "description": "Client-specific projects",
-        "icon": "👥",
-        "enabled": True,
-        "folder_structure": ["00_Notes", "01_Briefs", "02_Work", "03_Deliverables", "04_Communication"]
     }
 }
 

@@ -1,0 +1,152 @@
+/**
+ * Storage Data Table Component — Precision Studio Instrument
+ */
+
+import { formatBytes } from "../api.js";
+import { getCategoryIconSvg, icons } from "../icons.js";
+
+export function renderStorageTable(projects, currentSort = { key: "total_size", asc: false }) {
+  if (!projects || projects.length === 0) {
+    return `
+      <div class="empty-state">
+        <h3 style="margin-bottom: 0.35rem; color: var(--text-primary); font-size: 1rem;">No Projects Found</h3>
+        <p style="font-size: 0.85rem;">No projects matched your storage search or filter query.</p>
+      </div>
+    `;
+  }
+
+  const sorted = [...projects].sort((a, b) => {
+    let valA = a[currentSort.key];
+    let valB = b[currentSort.key];
+
+    if (typeof valA === "string") {
+      valA = valA.toLowerCase();
+      valB = (valB || "").toLowerCase();
+      return currentSort.asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    }
+
+    valA = valA || 0;
+    valB = valB || 0;
+    return currentSort.asc ? valA - valB : valB - valA;
+  });
+
+  const maxSize = Math.max(...projects.map(p => p.total_size || 0), 1);
+
+  const getSortIcon = (key) => {
+    if (currentSort.key !== key) return `<span class="sort-icon-idle">↕</span>`;
+    return currentSort.asc ? `<span class="sort-icon-active">▲</span>` : `<span class="sort-icon-active">▼</span>`;
+  };
+
+  const getThClass = (key) => {
+    return `sortable ${currentSort.key === key ? "sorted" : ""}`;
+  };
+
+  const cutoff = Date.now() - (90 * 24 * 60 * 60 * 1000);
+
+  const rows = sorted.map((p) => {
+    const cat = p.type || "Video";
+    const percent = Math.min(100, Math.max(3, ((p.total_size || 0) / maxSize) * 100));
+    const catIconSvg = getCategoryIconSvg(cat);
+    const rawDate = p.last_meaningful_update || p.created || "";
+    const dateStr = rawDate ? rawDate.substring(0, 10) : "—";
+    const relTime = getRelativeTime(rawDate);
+    const isStale = p.is_stale || p.status === "stale" || (rawDate && new Date(rawDate.replace(" ", "T")).getTime() < cutoff);
+
+    return `
+      <tr class="storage-row ${isStale ? 'is-stale-row' : ''}" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" tabindex="0" role="button" aria-label="Inspect ${p.name}">
+        <td>
+          <div class="cell-project-name">
+            <span class="cell-cat-icon" aria-hidden="true">${catIconSvg}</span>
+            <div class="cell-name-wrap">
+              <span class="cell-title" title="${p.path}">${p.name}</span>
+              <span class="cell-rel-path">${p.relative_path || p.slug}</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="card-cat-badge">
+            ${cat}
+          </span>
+        </td>
+        <td class="cell-mono">${p.created || "—"}</td>
+        <td>
+          <div class="cell-storage-wrap">
+            <span class="cell-mono font-bold" style="color: var(--text-primary);">${formatBytes(p.total_size)}</span>
+            <div class="cell-size-track">
+              <div class="cell-size-fill" style="width: ${percent}%;"></div>
+            </div>
+          </div>
+        </td>
+        <td class="cell-mono cell-media">${formatBytes(p.media_size)}</td>
+        <td class="cell-mono cell-reclaimable">
+          ${p.reclaimable_size > 0 ? `
+            <button type="button" class="row-reclaim-badge row-reclaim-trigger" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" title="Reclaim ${formatBytes(p.reclaimable_size)} from ${p.name}">
+              ${icons.zap}
+              <span>${formatBytes(p.reclaimable_size)}</span>
+            </button>
+          ` : `<span style="color: var(--text-dim);">0 B</span>`}
+        </td>
+        <td class="cell-mono">${p.file_count || 0}</td>
+        <td class="cell-mono cell-last-active">
+          <div class="cell-status-lockup ${isStale ? 'is-stale' : 'is-active'}" title="${isStale ? `Stale project: inactive for >90 days (${relTime})` : `Active project: updated ${relTime}`}">
+            <span class="cell-status-dot ${isStale ? 'dot-stale' : 'dot-active'}" aria-hidden="true"></span>
+            <span class="cell-date-text font-mono">${dateStr}</span>
+          </div>
+        </td>
+        <td style="text-align: right;">
+          <button class="btn btn-secondary btn-sm row-inspect-btn" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Inspect ${p.name}">
+            <span>Inspect</span>
+            ${icons.chevronRight}
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="${getThClass("name")}" data-sort="name">Project Name ${getSortIcon("name")}</th>
+              <th class="${getThClass("type")}" data-sort="type">Category ${getSortIcon("type")}</th>
+              <th class="${getThClass("created")}" data-sort="created">Created ${getSortIcon("created")}</th>
+              <th class="${getThClass("total_size")}" data-sort="total_size">Total Footprint ${getSortIcon("total_size")}</th>
+              <th class="${getThClass("media_size")}" data-sort="media_size">Media ${getSortIcon("media_size")}</th>
+              <th class="${getThClass("reclaimable_size")}" data-sort="reclaimable_size">Reclaimable ${getSortIcon("reclaimable_size")}</th>
+              <th class="${getThClass("file_count")}" data-sort="file_count">Files ${getSortIcon("file_count")}</th>
+              <th class="${getThClass("last_meaningful_update")}" data-sort="last_meaningful_update">Last Active ${getSortIcon("last_meaningful_update")}</th>
+              <th style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+      <div class="table-footer-info">
+        <span>Showing <strong>${sorted.length}</strong> project${sorted.length === 1 ? '' : 's'}</span>
+        <span class="safe-tag">Storage inventory is <strong>read-only</strong></span>
+      </div>
+    </div>
+  `;
+}
+
+function getRelativeTime(dateStr) {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr.replace(" ", "T"));
+    if (isNaN(d.getTime())) return dateStr.substring(0, 10);
+    const diffDays = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+    return `${(diffDays / 365).toFixed(1)}y ago`;
+  } catch {
+    return dateStr.substring(0, 10);
+  }
+}
+
