@@ -31,7 +31,12 @@ export function initRouter(containerId = "app-main") {
 
     // Parse query params if any
     const params = new URLSearchParams(queryString || "");
-    const initialPath = params.get("path") || "";
+    let initialPath = params.get("path");
+    if (initialPath === null && routeKey === "#explorer") {
+      initialPath = localStorage.getItem("cos_explorer_last_path") || "";
+    } else if (initialPath === null) {
+      initialPath = "";
+    }
 
     // Update active nav link
     document.querySelectorAll(".nav-item").forEach((el) => {

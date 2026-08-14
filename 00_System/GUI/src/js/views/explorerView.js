@@ -206,6 +206,17 @@ export async function renderExplorer(container, initialPath = "") {
         parentBtn.disabled = !currentParentPath;
       }
 
+      // Persist last visited path
+      if (currentPath) {
+        localStorage.setItem("cos_explorer_last_path", currentPath);
+      }
+
+      // Update URL hash with query param for bookmarking, refresh, and deep linking
+      const targetHash = currentPath ? `#explorer?path=${encodeURIComponent(currentPath)}` : "#explorer";
+      if (window.location.hash !== targetHash) {
+        history.replaceState(null, "", targetHash);
+      }
+
       renderBreadcrumbs(data.current_path, data.relative_display);
       renderEntries();
 
@@ -227,6 +238,7 @@ export async function renderExplorer(container, initialPath = "") {
           </div>
         `;
         document.getElementById("explorer-error-home-btn")?.addEventListener("click", () => {
+          localStorage.removeItem("cos_explorer_last_path");
           loadDirectory("");
         });
       }
@@ -526,7 +538,51 @@ export async function renderExplorer(container, initialPath = "") {
     });
   }
 
+  // Global media playback & mute memory
+  let isMediaMuted = localStorage.getItem("cos_media_muted") !== "false"; // Default: true (muted)
+  let shouldPlayMedia = localStorage.getItem("cos_media_playback") !== "paused"; // Default: true (playing)
+
+  function setupMediaSync(mediaEl) {
+    if (!mediaEl) return;
+    mediaEl.muted = isMediaMuted;
+
+    if (shouldPlayMedia) {
+      mediaEl.play().catch(() => {});
+    } else {
+      mediaEl.pause();
+    }
+
+    mediaEl.addEventListener("play", () => {
+      shouldPlayMedia = true;
+      localStorage.setItem("cos_media_playback", "playing");
+    });
+
+    mediaEl.addEventListener("pause", () => {
+      if (mediaEl.currentTime < (mediaEl.duration || 1) - 0.15) {
+        shouldPlayMedia = false;
+        localStorage.setItem("cos_media_playback", "paused");
+      }
+    });
+
+    mediaEl.addEventListener("volumechange", () => {
+      isMediaMuted = mediaEl.muted;
+      localStorage.setItem("cos_media_muted", isMediaMuted ? "true" : "false");
+    });
+  }
+
+  function pauseAllMedia() {
+    const previewVid = document.getElementById("preview-video-tag");
+    if (previewVid) previewVid.pause();
+    const previewAud = document.getElementById("preview-audio-tag");
+    if (previewAud) previewAud.pause();
+    const qlVid = document.getElementById("ql-video-tag");
+    if (qlVid) qlVid.pause();
+    const qlAud = document.getElementById("ql-audio-tag");
+    if (qlAud) qlAud.pause();
+  }
+
   function selectItem(entry) {
+    pauseAllMedia();
     selectedItem = entry;
     contentAreaEl.querySelectorAll(".explorer-card, .explorer-row").forEach(el => {
       if (el.getAttribute("data-path") === entry.path) {
@@ -591,7 +647,7 @@ export async function renderExplorer(container, initialPath = "") {
     } else if (isVideo) {
       mediaViewerHtml = `
         <div class="inspector-media-frame">
-          <video controls autoplay playsinline class="preview-video-element" id="preview-video-tag" src="${rawUrl}">
+          <video controls playsinline class="preview-video-element" id="preview-video-tag" src="${rawUrl}">
             Your browser does not support video playback.
           </video>
         </div>
@@ -601,7 +657,7 @@ export async function renderExplorer(container, initialPath = "") {
         <div class="inspector-media-frame">
           <div class="preview-audio-container">
             <div class="preview-audio-icon">${icons.audio}</div>
-            <audio controls autoplay class="preview-audio-element" src="${rawUrl}"></audio>
+            <audio controls class="preview-audio-element" id="preview-audio-tag" src="${rawUrl}"></audio>
           </div>
         </div>
       `;
@@ -771,10 +827,11 @@ export async function renderExplorer(container, initialPath = "") {
       }
     }
 
-    // Video Dimensions calculation
+    // Video Dimensions & Media Sync
     if (isVideo) {
       const videoEl = document.getElementById("preview-video-tag");
       if (videoEl) {
+        setupMediaSync(videoEl);
         videoEl.onloadedmetadata = () => {
           const dimRow = document.getElementById("inspector-dimensions-row");
           const dimVal = document.getElementById("inspector-dimensions-val");
@@ -783,6 +840,14 @@ export async function renderExplorer(container, initialPath = "") {
             dimRow.style.display = "flex";
           }
         };
+      }
+    }
+
+    // Audio Media Sync
+    if (isAudio) {
+      const audioEl = document.getElementById("preview-audio-tag");
+      if (audioEl) {
+        setupMediaSync(audioEl);
       }
     }
 
@@ -824,6 +889,7 @@ export async function renderExplorer(container, initialPath = "") {
 
   async function openQuickLookModal(initialItem) {
     if (!initialItem) return;
+    pauseAllMedia();
     let currentItem = initialItem;
 
     function getFilteredList() {
@@ -845,6 +911,7 @@ export async function renderExplorer(container, initialPath = "") {
     activeQuickLookModal = modalEl;
 
     async function renderQuickLook() {
+      pauseAllMedia();
       const list = getFilteredList();
       const currentIndex = list.findIndex(e => e.path === currentItem.path);
       const totalCount = list.length;
@@ -898,7 +965,7 @@ export async function renderExplorer(container, initialPath = "") {
       } else if (isVideo) {
         bodyHtml = `
           <div class="quicklook-media-container">
-            <video controls autoplay playsinline class="quicklook-video-element" id="ql-video-tag" src="${rawUrl}">
+            <video controls playsinline class="quicklook-video-element" id="ql-video-tag" src="${rawUrl}">
               Your browser does not support video playback.
             </video>
           </div>
@@ -912,7 +979,7 @@ export async function renderExplorer(container, initialPath = "") {
                 <h3 style="margin-bottom: 0.25rem; font-size: 1.15rem;">${escapeHtml(currentItem.name)}</h3>
                 <p style="color: var(--text-muted); font-size: 0.85rem;">${formatBytes(currentItem.size)}</p>
               </div>
-              <audio controls autoplay class="preview-audio-element" style="width: 340px;" src="${rawUrl}"></audio>
+              <audio controls class="preview-audio-element" id="ql-audio-tag" style="width: 340px;" src="${rawUrl}"></audio>
             </div>
           </div>
         `;
@@ -980,6 +1047,9 @@ export async function renderExplorer(container, initialPath = "") {
                 ${icons.externalLink}
                 <span>Open in OS</span>
               </button>
+              <button class="quicklook-nav-btn" id="ql-fullscreen-native-btn" title="Toggle Native Fullscreen">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              </button>
               <button class="modal-close-btn" id="ql-close-btn" aria-label="Close Preview (Esc)">
                 ${icons.x}
               </button>
@@ -996,6 +1066,14 @@ export async function renderExplorer(container, initialPath = "") {
       document.getElementById("ql-close-btn")?.addEventListener("click", closeQuickLook);
       modalEl.addEventListener("click", (e) => {
         if (e.target === modalEl) closeQuickLook();
+      });
+
+      document.getElementById("ql-fullscreen-native-btn")?.addEventListener("click", () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else {
+          modalEl.requestFullscreen().catch(() => {});
+        }
       });
 
       document.getElementById("ql-prev-btn")?.addEventListener("click", () => {
@@ -1032,6 +1110,18 @@ export async function renderExplorer(container, initialPath = "") {
       document.getElementById("ql-open-binary-btn")?.addEventListener("click", () => {
         openItemNatively(currentItem.path);
       });
+
+      // Video Media Sync in QuickLook
+      if (isVideo) {
+        const qlVid = document.getElementById("ql-video-tag");
+        if (qlVid) setupMediaSync(qlVid);
+      }
+
+      // Audio Media Sync in QuickLook
+      if (isAudio) {
+        const qlAud = document.getElementById("ql-audio-tag");
+        if (qlAud) setupMediaSync(qlAud);
+      }
 
       // Async fetch doc in QuickLook
       if (isDoc) {
@@ -1090,6 +1180,7 @@ export async function renderExplorer(container, initialPath = "") {
     window.addEventListener("keydown", onQuickLookKeyDown);
 
     function closeQuickLook() {
+      pauseAllMedia();
       window.removeEventListener("keydown", onQuickLookKeyDown);
       if (modalEl && modalEl.parentNode) {
         modalEl.parentNode.removeChild(modalEl);
@@ -1179,7 +1270,10 @@ export async function renderExplorer(container, initialPath = "") {
   // Quick Roots Jumps
   container.querySelectorAll(".quick-root-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      const target = btn.getAttribute("data-target");
+      const target = btn.getAttribute("data-target") || "";
+      if (!target) {
+        localStorage.removeItem("cos_explorer_last_path");
+      }
       loadDirectory(target);
     });
   });
