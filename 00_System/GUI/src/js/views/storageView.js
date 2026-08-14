@@ -40,12 +40,28 @@ export async function renderStorage(container, options = {}) {
     <!-- Storage Visual Multi-segment Bar & Stats -->
     <div id="storage-summary-container"></div>
 
-    <div class="studio-toolbar">
-      <div class="search-box">
+    <div class="studio-toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
+      <div class="search-box" style="flex: 1; min-width: 260px;">
         <span class="search-icon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </span>
         <input type="text" id="storage-search-input" class="search-input" placeholder="Search projects by name, category, or path..." />
+      </div>
+      <div class="storage-filter-tabs" id="storage-filter-tabs">
+        <button type="button" class="storage-filter-tab is-active" data-filter="all" id="tab-filter-all">
+          <span>All Projects</span>
+          <span class="badge font-mono" id="filter-count-all">0</span>
+        </button>
+        <button type="button" class="storage-filter-tab" data-filter="stale" id="tab-filter-stale">
+          <span class="cell-status-dot dot-stale" style="width: 6px; height: 6px;"></span>
+          <span>Stale (&gt;90d)</span>
+          <span class="badge font-mono" id="filter-count-stale">0</span>
+        </button>
+        <button type="button" class="storage-filter-tab" data-filter="reclaimable" id="tab-filter-reclaimable">
+          <span style="color: var(--color-warning);">${icons.zap}</span>
+          <span>Reclaimable</span>
+          <span class="badge font-mono" id="filter-count-reclaimable">0</span>
+        </button>
       </div>
     </div>
 
@@ -60,8 +76,10 @@ export async function renderStorage(container, options = {}) {
   `;
 
   let currentSort = { key: "total_size", asc: false };
+  let activeFilter = "all"; // "all" | "stale" | "reclaimable"
   let allProjects = [];
   let categoriesConfig = {};
+  const cutoff = Date.now() - (90 * 24 * 60 * 60 * 1000);
 
   function updateSummary(data) {
     const summaryContainer = document.getElementById("storage-summary-container");
@@ -95,6 +113,22 @@ export async function renderStorage(container, options = {}) {
       .sort((a, b) => (b.total_size || 0) - (a.total_size || 0))
       .slice(0, 3);
 
+    // Update filter tab counts
+    const pList = data.projects || allProjects || [];
+    const staleCount = pList.filter(p => {
+      if (p.is_stale || p.status === "stale") return true;
+      const raw = p.last_meaningful_update || p.created;
+      return raw ? new Date(raw.replace(" ", "T")).getTime() < cutoff : true;
+    }).length;
+    const reclaimableCount = pList.filter(p => (p.reclaimable_size || 0) > 0).length;
+
+    const elAll = document.getElementById("filter-count-all");
+    const elStale = document.getElementById("filter-count-stale");
+    const elRec = document.getElementById("filter-count-reclaimable");
+    if (elAll) elAll.textContent = pList.length;
+    if (elStale) elStale.textContent = staleCount;
+    if (elRec) elRec.textContent = reclaimableCount;
+
     summaryContainer.innerHTML = `
       <!-- Flattened Storage Overview Strip -->
       <div class="storage-overview-strip">
@@ -127,15 +161,15 @@ export async function renderStorage(container, options = {}) {
             <span class="insight-val font-mono" style="color: var(--color-accent-cyan);">${formatBytes(media)}</span>
             <span class="insight-sub">RAW &amp; Audio</span>
           </div>
-          <div class="storage-insight-cell">
+          <div class="storage-insight-cell is-clickable" id="insight-reclaimable-card" title="Click to filter to projects with reclaimable cache">
             <span class="insight-label">Reclaimable</span>
             <span class="insight-val font-mono" style="color: var(--color-warning);">${formatBytes(reclaimable)}</span>
-            <span class="insight-sub">Caches</span>
+            <span class="insight-sub" style="color: var(--color-warning);">${reclaimableCount} with cache &rarr;</span>
           </div>
-          <div class="storage-insight-cell">
+          <div class="storage-insight-cell is-clickable" id="insight-stale-card" title="Click to filter to Stale projects (>90d inactive)">
             <span class="insight-label">Last Indexed</span>
             <span class="insight-val font-mono" style="font-size: 0.95rem; margin-top: 0.15rem;">${data.scanned_at ? data.scanned_at.substring(0, 10) : 'Live'}</span>
-            <span class="insight-sub">${data.stale_count || 0} stale (&gt;90d)</span>
+            <span class="insight-sub" style="color: var(--color-warning); font-weight: 600;">${staleCount} stale (&gt;90d) &rarr;</span>
           </div>
         </div>
       </div>
@@ -159,6 +193,16 @@ export async function renderStorage(container, options = {}) {
         </div>
       ` : ''}
     `;
+
+    // Click on stale insight card to filter
+    document.getElementById("insight-stale-card")?.addEventListener("click", () => {
+      setFilter("stale");
+    });
+
+    // Click on reclaimable insight card to filter
+    document.getElementById("insight-reclaimable-card")?.addEventListener("click", () => {
+      setFilter("reclaimable");
+    });
 
     // Attach click handlers to top consumer cards
     summaryContainer.querySelectorAll(".top-consumer-card").forEach(card => {
@@ -184,12 +228,33 @@ export async function renderStorage(container, options = {}) {
     });
   }
 
+  function setFilter(filter) {
+    activeFilter = filter;
+    document.querySelectorAll(".storage-filter-tab").forEach(tab => {
+      if (tab.getAttribute("data-filter") === filter) {
+        tab.classList.add("is-active");
+      } else {
+        tab.classList.remove("is-active");
+      }
+    });
+    renderTable();
+  }
+
   function renderTable() {
     const tableContainer = document.getElementById("storage-table-container");
     const searchInput = document.getElementById("storage-search-input");
     const query = (searchInput?.value || "").toLowerCase().trim();
 
     const filtered = allProjects.filter(p => {
+      if (activeFilter === "stale") {
+        const isStale = p.is_stale || p.status === "stale" ||
+          (p.last_meaningful_update && new Date(p.last_meaningful_update.replace(" ", "T")).getTime() < cutoff) ||
+          (!p.last_meaningful_update && p.created && new Date(p.created.replace(" ", "T")).getTime() < cutoff);
+        if (!isStale) return false;
+      } else if (activeFilter === "reclaimable") {
+        if ((p.reclaimable_size || 0) <= 0) return false;
+      }
+
       if (!query) return true;
       return (p.name && p.name.toLowerCase().includes(query)) ||
              (p.type && p.type.toLowerCase().includes(query)) ||
@@ -350,6 +415,12 @@ export async function renderStorage(container, options = {}) {
 
   const searchInput = document.getElementById("storage-search-input");
   searchInput?.addEventListener("input", renderTable);
+
+  document.querySelectorAll(".storage-filter-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      setFilter(tab.getAttribute("data-filter") || "all");
+    });
+  });
 
   await loadData();
 }

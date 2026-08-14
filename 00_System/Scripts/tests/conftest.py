@@ -19,6 +19,14 @@ def temp_dir():
         yield Path(tmpdir)
 
 
+@pytest.fixture(autouse=True)
+def isolate_storage_index(temp_dir, monkeypatch):
+    """Ensure tests never overwrite the live storage index in 00_System/Config."""
+    test_index = temp_dir / "isolated_storage_index.json"
+    monkeypatch.setattr("cos.storage.STORAGE_INDEX_PATH", str(test_index))
+    monkeypatch.setattr("cos.config.STORAGE_INDEX_PATH", str(test_index))
+
+
 @pytest.fixture
 def temp_projects_dir(temp_dir):
     """Create a temporary projects directory structure."""

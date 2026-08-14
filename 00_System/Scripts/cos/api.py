@@ -50,7 +50,9 @@ from .storage import (
     reclaim_bulk_space,
     reclaim_project_space,
     refresh_storage_index,
+    remove_project_from_storage_index,
     stale_projects,
+    update_project_in_storage_index,
 )
 from .security import sanitize_path_input, validate_client_name
 from .file_utils import robust_rmtree
@@ -322,6 +324,10 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
             simple=req.simple,
             git=req.git,
         )
+        try:
+            update_project_in_storage_index(meta["root"], metadata=meta, projects_path=PROJECTS_PATH)
+        except Exception:
+            pass
         _invalidate_server_cache()
         return {
             "status": "success",
@@ -483,6 +489,13 @@ def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, An
         rel_path = proj_path.relative_to(Path(PROJECTS_PATH)).as_posix()
     except Exception:
         rel_path = proj_path.name
+
+    try:
+        if moved_disk:
+            remove_project_from_storage_index(current_resolved, projects_path=PROJECTS_PATH)
+        update_project_in_storage_index(proj_path, metadata=meta, projects_path=PROJECTS_PATH)
+    except Exception:
+        pass
 
     _invalidate_server_cache()
 
@@ -856,7 +869,7 @@ def archive_project(project_name: str) -> dict[str, Any]:
             logger.warning(f"Could not cleanly remove source project {proj_path} after copy to archive.")
 
         try:
-            refresh_storage_index()
+            remove_project_from_storage_index(proj_path, projects_path=PROJECTS_PATH)
         except Exception:
             pass
 
@@ -928,7 +941,7 @@ def resurrect_project(project_name: str) -> dict[str, Any]:
             logger.warning(f"Could not completely remove {proj_path} from archive after restoring.")
 
         try:
-            refresh_storage_index()
+            update_project_in_storage_index(final_dest, metadata=meta, projects_path=PROJECTS_PATH)
         except Exception:
             pass
 

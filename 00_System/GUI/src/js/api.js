@@ -190,8 +190,10 @@ export const api = {
     const res = await request("/storage/refresh", {
       method: "POST",
     });
-    cacheStore.invalidate("projects");
-    cacheStore.invalidate("storage");
+    if (res && res.projects) {
+      cacheStore.set("storage", res);
+      cacheStore.set("projects", res.projects);
+    }
     return res;
   },
   getProjectReclaimable: (project) => request(`/storage/reclaimable?project=${encodeURIComponent(project)}`),
@@ -200,8 +202,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ project, targets }),
     });
-    cacheStore.invalidate("projects");
-    cacheStore.invalidate("storage");
+    const cachedStorage = cacheStore.get("storage");
+    if (cachedStorage && Array.isArray(cachedStorage.projects)) {
+      const pMatch = cachedStorage.projects.find(p => p.name === res.project || p.slug === res.slug || p.path === res.path);
+      if (pMatch) {
+        pMatch.reclaimable_size = res.remaining_reclaimable || 0;
+        pMatch.total_size = Math.max(0, (pMatch.total_size || 0) - (res.freed_bytes || 0));
+        cachedStorage.total_size = Math.max(0, (cachedStorage.total_size || 0) - (res.freed_bytes || 0));
+        cachedStorage.reclaimable_size = Math.max(0, (cachedStorage.reclaimable_size || 0) - (res.freed_bytes || 0));
+        cacheStore.set("storage", cachedStorage);
+      }
+    }
     return res;
   },
   reclaimBulk: async ({ stale_only = false, days = 90, project_slugs = null } = {}) => {
@@ -209,8 +220,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ stale_only, days, project_slugs }),
     });
-    cacheStore.invalidate("projects");
-    cacheStore.invalidate("storage");
+    if (res && res.new_storage_summary) {
+      const cachedStorage = cacheStore.get("storage");
+      if (cachedStorage) {
+        cachedStorage.total_size = res.new_storage_summary.total_size;
+        cachedStorage.reclaimable_size = res.new_storage_summary.reclaimable_size;
+        cachedStorage.media_size = res.new_storage_summary.media_size;
+        cacheStore.set("storage", cachedStorage);
+      }
+    }
     return res;
   },
 

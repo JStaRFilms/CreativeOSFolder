@@ -59,6 +59,8 @@ function renderMarkdownSafe(rawText) {
 export async function renderExplorer(container, initialPath = "") {
   let showPreview = localStorage.getItem("cos_explorer_preview_pane") !== "false";
   let viewMode = localStorage.getItem("cos_explorer_view_mode") || "list";
+  let sortField = localStorage.getItem("cos_explorer_sort_field") || "name";
+  let sortDir = localStorage.getItem("cos_explorer_sort_dir") || "asc";
   let currentPath = initialPath;
   let currentParentPath = null;
   let currentEntries = [];
@@ -252,14 +254,57 @@ export async function renderExplorer(container, initialPath = "") {
     });
   }
 
+  function sortEntries(entries) {
+    return [...entries].sort((a, b) => {
+      // Always group folders on top by default
+      if (a.is_dir && !b.is_dir) return -1;
+      if (!a.is_dir && b.is_dir) return 1;
+
+      let comp = 0;
+      if (sortField === "name") {
+        comp = (a.name || "").localeCompare(b.name || "", undefined, { numeric: true, sensitivity: "base" });
+      } else if (sortField === "type") {
+        const typeA = a.is_dir ? "Folder" : (a.type || a.extension || "");
+        const typeB = b.is_dir ? "Folder" : (b.type || b.extension || "");
+        comp = typeA.localeCompare(typeB, undefined, { numeric: true, sensitivity: "base" });
+        if (comp === 0) {
+          comp = (a.name || "").localeCompare(b.name || "", undefined, { numeric: true, sensitivity: "base" });
+        }
+      } else if (sortField === "size") {
+        const sizeA = a.size || 0;
+        const sizeB = b.size || 0;
+        comp = sizeA - sizeB;
+        if (comp === 0) {
+          comp = (a.name || "").localeCompare(b.name || "", undefined, { numeric: true, sensitivity: "base" });
+        }
+      } else if (sortField === "modified") {
+        const dateA = a.modified ? new Date(a.modified).getTime() : 0;
+        const dateB = b.modified ? new Date(b.modified).getTime() : 0;
+        comp = dateA - dateB;
+        if (comp === 0) {
+          comp = (a.name || "").localeCompare(b.name || "", undefined, { numeric: true, sensitivity: "base" });
+        }
+      }
+
+      return sortDir === "desc" ? -comp : comp;
+    });
+  }
+
+  function getSortIndicator(field) {
+    if (sortField !== field) return '';
+    return `<span class="sort-indicator">${sortDir === 'asc' ? '▲' : '▼'}</span>`;
+  }
+
   function renderEntries() {
     if (!contentAreaEl) return;
 
     const query = (searchInput?.value || "").toLowerCase().trim();
-    const filtered = currentEntries.filter(entry => {
+    let filtered = currentEntries.filter(entry => {
       if (!query) return true;
       return entry.name.toLowerCase().includes(query) || (entry.type && entry.type.toLowerCase().includes(query));
     });
+
+    filtered = sortEntries(filtered);
 
     if (filtered.length === 0) {
       contentAreaEl.innerHTML = `
@@ -320,10 +365,30 @@ export async function renderExplorer(container, initialPath = "") {
         <table class="explorer-data-table">
           <thead>
             <tr>
-              <th class="col-name">Name</th>
-              <th class="col-type">Type</th>
-              <th class="col-size">Size</th>
-              <th class="col-date">Modified</th>
+              <th class="col-name sortable ${sortField === 'name' ? 'is-sorted' : ''}" data-sort="name" title="Sort by Name">
+                <div class="sort-header-inner">
+                  <span>Name</span>
+                  ${getSortIndicator('name')}
+                </div>
+              </th>
+              <th class="col-type sortable ${sortField === 'type' ? 'is-sorted' : ''}" data-sort="type" title="Sort by Type">
+                <div class="sort-header-inner">
+                  <span>Type</span>
+                  ${getSortIndicator('type')}
+                </div>
+              </th>
+              <th class="col-size sortable ${sortField === 'size' ? 'is-sorted' : ''}" data-sort="size" title="Sort by Size">
+                <div class="sort-header-inner">
+                  <span>Size</span>
+                  ${getSortIndicator('size')}
+                </div>
+              </th>
+              <th class="col-date sortable ${sortField === 'modified' ? 'is-sorted' : ''}" data-sort="modified" title="Sort by Date Modified">
+                <div class="sort-header-inner">
+                  <span>Modified</span>
+                  ${getSortIndicator('modified')}
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -352,6 +417,23 @@ export async function renderExplorer(container, initialPath = "") {
         </table>
       `;
     }
+
+    // Attach Header Sorting Click Handlers
+    contentAreaEl.querySelectorAll("th.sortable").forEach(th => {
+      th.addEventListener("click", () => {
+        const field = th.getAttribute("data-sort");
+        if (!field) return;
+        if (sortField === field) {
+          sortDir = sortDir === "asc" ? "desc" : "asc";
+        } else {
+          sortField = field;
+          sortDir = (field === "size" || field === "modified") ? "desc" : "asc";
+        }
+        localStorage.setItem("cos_explorer_sort_field", sortField);
+        localStorage.setItem("cos_explorer_sort_dir", sortDir);
+        renderEntries();
+      });
+    });
 
     // Attach Click / Selection / Open Handlers
     const items = contentAreaEl.querySelectorAll(".explorer-card, .explorer-row");

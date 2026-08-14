@@ -345,6 +345,79 @@ def _recalculate_totals(index: dict[str, Any]) -> None:
     index["media_size"] = sum(p.get("media_size", 0) for p in projects)
 
 
+def update_project_in_storage_index(
+    project_path: str | Path,
+    metadata: dict[str, Any] | None = None,
+    projects_path: str | Path | None = None,
+    index_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Inspect a single project and incrementally update its record in the storage index.
+    
+    This avoids expensive re-scanning of the entire workspace when only one project changes.
+    """
+    root = Path(projects_path or PROJECTS_PATH).resolve()
+    proj = Path(project_path)
+    if not proj.is_absolute():
+        proj = root / proj
+    proj = proj.resolve()
+
+    index = load_storage_index(index_path=index_path, projects_path=root)
+    if index is None:
+        return refresh_storage_index(projects_path=root, index_path=index_path)
+
+    if not proj.is_dir():
+        return remove_project_from_storage_index(proj, projects_path=root, index_path=index_path)
+
+    if metadata is None:
+        meta_file = proj / ".project_meta.json"
+        if meta_file.exists():
+            try:
+                metadata = json.loads(meta_file.read_text(encoding="utf-8-sig"))
+            except Exception:
+                metadata = {}
+        else:
+            metadata = {}
+
+    # Inspect just this single project
+    project_record = inspect_project(proj, metadata, root)
+    proj_str = str(proj)
+
+    # Replace existing or append
+    projects = [p for p in index.get("projects", []) if p.get("path") != proj_str]
+    projects.append(project_record)
+    projects.sort(key=lambda p: p.get("total_size", 0), reverse=True)
+
+    index["projects"] = projects
+    index["scanned_at"] = _utc_now().isoformat()
+    _recalculate_totals(index)
+    save_storage_index(index, index_path)
+    return index
+
+
+def remove_project_from_storage_index(
+    project_path: str | Path,
+    projects_path: str | Path | None = None,
+    index_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Remove a single project (e.g. archived, deleted, or moved) from the cached storage index."""
+    root = Path(projects_path or PROJECTS_PATH).resolve()
+    proj = Path(project_path)
+    if not proj.is_absolute():
+        proj = root / proj
+    proj_str = str(proj.resolve())
+
+    index = load_storage_index(index_path=index_path, projects_path=root)
+    if index is None:
+        return refresh_storage_index(projects_path=root, index_path=index_path)
+
+    projects = [p for p in index.get("projects", []) if p.get("path") != proj_str]
+    index["projects"] = projects
+    index["scanned_at"] = _utc_now().isoformat()
+    _recalculate_totals(index)
+    save_storage_index(index, index_path)
+    return index
+
+
 def refresh_partial(
     scope_path: str | Path,
     projects_path: str | Path | None = None,
@@ -355,7 +428,7 @@ def refresh_partial(
     Returns ``(index, count)`` where *count* is how many projects were rescanned.
     If no cached index exists, falls back to a full scan.
     """
-    root = Path(projects_path or PROJECTS_PATH)
+    root = Path(projects_path or PROJECTS_PATH).resolve()
     scope = Path(scope_path)
 
     # Resolve relative paths against the projects root.
@@ -363,7 +436,12 @@ def refresh_partial(
         scope = root / scope
     scope = scope.resolve()
 
-    prior_index = load_storage_index(index_path)
+    # Fast path: if scope is a single project directory with .project_meta.json
+    if (scope / ".project_meta.json").is_file():
+        idx = update_project_in_storage_index(scope, projects_path=root, index_path=index_path)
+        return idx, 1
+
+    prior_index = load_storage_index(index_path, projects_path=root)
     if prior_index is None:
         # No cache — must do a full scan anyway.
         return refresh_storage_index(projects_path, index_path), -1

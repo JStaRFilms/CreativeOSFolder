@@ -41,13 +41,19 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
     return `sortable ${currentSort.key === key ? "sorted" : ""}`;
   };
 
+  const cutoff = Date.now() - (90 * 24 * 60 * 60 * 1000);
+
   const rows = sorted.map((p) => {
     const cat = p.type || "Video";
     const percent = Math.min(100, Math.max(3, ((p.total_size || 0) / maxSize) * 100));
     const catIconSvg = getCategoryIconSvg(cat);
+    const rawDate = p.last_meaningful_update || p.created || "";
+    const dateStr = rawDate ? rawDate.substring(0, 10) : "—";
+    const relTime = getRelativeTime(rawDate);
+    const isStale = p.is_stale || p.status === "stale" || (rawDate && new Date(rawDate.replace(" ", "T")).getTime() < cutoff);
 
     return `
-      <tr class="storage-row" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" tabindex="0" role="button" aria-label="Inspect ${p.name}">
+      <tr class="storage-row ${isStale ? 'is-stale-row' : ''}" data-slug="${p.slug || ''}" data-name="${p.name || ''}" data-path="${p.path || ''}" tabindex="0" role="button" aria-label="Inspect ${p.name}">
         <td>
           <div class="cell-project-name">
             <span class="cell-cat-icon" aria-hidden="true">${catIconSvg}</span>
@@ -81,7 +87,12 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
           ` : `<span style="color: var(--text-dim);">0 B</span>`}
         </td>
         <td class="cell-mono">${p.file_count || 0}</td>
-        <td class="cell-mono">${p.last_meaningful_update ? p.last_meaningful_update.substring(0, 10) : "—"}</td>
+        <td class="cell-mono cell-last-active">
+          <div class="cell-status-lockup ${isStale ? 'is-stale' : 'is-active'}" title="${isStale ? `Stale project: inactive for >90 days (${relTime})` : `Active project: updated ${relTime}`}">
+            <span class="cell-status-dot ${isStale ? 'dot-stale' : 'dot-active'}" aria-hidden="true"></span>
+            <span class="cell-date-text font-mono">${dateStr}</span>
+          </div>
+        </td>
         <td style="text-align: right;">
           <button class="btn btn-secondary btn-sm row-inspect-btn" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Inspect ${p.name}">
             <span>Inspect</span>
@@ -121,3 +132,21 @@ export function renderStorageTable(projects, currentSort = { key: "total_size", 
     </div>
   `;
 }
+
+function getRelativeTime(dateStr) {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr.replace(" ", "T"));
+    if (isNaN(d.getTime())) return dateStr.substring(0, 10);
+    const diffDays = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+    return `${(diffDays / 365).toFixed(1)}y ago`;
+  } catch {
+    return dateStr.substring(0, 10);
+  }
+}
+

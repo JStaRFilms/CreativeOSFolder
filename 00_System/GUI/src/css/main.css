@@ -768,10 +768,47 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  transition: all var(--transition-fast);
+}
+
+.modal-metric-card.is-actionable-reclaim {
+  cursor: pointer;
+}
+
+.modal-metric-card.is-actionable-reclaim:hover {
+  background-color: rgba(245, 158, 11, 0.08);
 }
 
 .modal-metric-card:not(:last-child) {
   border-right: 1px solid var(--border-subtle);
+}
+
+.metric-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.metric-clean-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  background-color: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-full);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--color-warning);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.metric-clean-pill:hover {
+  background-color: var(--color-warning);
+  color: #000;
+  transform: translateY(-1px);
 }
 
 .metric-label {
@@ -1346,6 +1383,37 @@ body {
   z-index: 2;
 }
 
+.explorer-data-table th.sortable {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.explorer-data-table th.sortable:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.explorer-data-table th.sortable.is-sorted {
+  color: var(--text-primary);
+  background-color: var(--bg-surface-hover);
+}
+
+.sort-header-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.sort-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
 .explorer-data-table th.col-name,
 .explorer-data-table td.col-name,
 .explorer-data-table th:first-child,
@@ -1373,6 +1441,11 @@ body {
   width: 155px;
   text-align: right;
   white-space: nowrap;
+}
+
+.explorer-data-table th.col-size .sort-header-inner,
+.explorer-data-table th.col-date .sort-header-inner {
+  justify-content: flex-end;
 }
 
 .explorer-data-table td {
@@ -1756,3 +1829,91 @@ body {
   text-align: center;
   gap: 0.5rem;
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Storage Table Status Lockup & Filter Tabs                                 */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+.cell-status-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.cell-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.cell-status-dot.dot-stale {
+  background-color: var(--color-warning);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+
+.cell-status-dot.dot-active {
+  background-color: var(--color-success);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.35);
+}
+
+.stale-pill-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-full);
+  background-color: rgba(245, 158, 11, 0.12);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  line-height: 1.2;
+}
+
+.storage-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.storage-filter-tab {
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-app);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all var(--transition-fast);
+  font-family: inherit;
+}
+
+.storage-filter-tab:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.storage-filter-tab.is-active {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--color-primary);
+  color: var(--text-primary);
+}
+
+.storage-insight-cell.is-clickable {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.storage-insight-cell.is-clickable:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+

@@ -241,10 +241,15 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                   <span class="metric-val" style="color: var(--color-accent-cyan);">${formatBytes(currentProject.media_size || 0)}</span>
                   <span class="metric-sub">RAW &amp; Audio</span>
                 </div>
-                <div class="modal-metric-card">
-                  <span class="metric-label">Reclaimable</span>
-                  <span class="metric-val" style="color: var(--color-warning);">${formatBytes(currentProject.reclaimable_size || 0)}</span>
-                  <span class="metric-sub">Caches</span>
+                <div class="modal-metric-card ${(currentProject.reclaimable_size || 0) > 0 ? 'is-actionable-reclaim' : ''}" id="modal-metric-reclaim-card" title="${(currentProject.reclaimable_size || 0) > 0 ? 'Click to inspect & clean cache files' : 'No regenerable cache detected'}">
+                  <div class="metric-top-row">
+                    <span class="metric-label">Reclaimable</span>
+                    ${(currentProject.reclaimable_size || 0) > 0 ? `
+                      <span class="metric-clean-pill font-mono" id="modal-reclaim-pill">${icons.zap} Clean</span>
+                    ` : ''}
+                  </div>
+                  <span class="metric-val" style="color: ${(currentProject.reclaimable_size || 0) > 0 ? 'var(--color-warning)' : 'var(--text-dim)'};">${formatBytes(currentProject.reclaimable_size || 0)}</span>
+                  <span class="metric-sub">${(currentProject.reclaimable_size || 0) > 0 ? 'Click to free space' : 'Caches'}</span>
                 </div>
               </div>
 
@@ -293,10 +298,10 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
               </div>
             </div>
 
-            <!-- Workspace Actions Strip (Explorer / Travel / Archive) -->
+            <!-- Workspace Actions Strip (4-column balanced grid) -->
             <div class="modal-section">
               <h4 class="modal-section-heading">Actions</h4>
-              <div class="workspace-actions-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
+              <div class="workspace-actions-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
                 <button class="btn btn-secondary action-btn-explorer" id="modal-explore-files-btn" style="font-size: 0.785rem; padding: 0.4rem 0.65rem;">
                   ${icons.folderOpen}
                   Browse Files
@@ -313,12 +318,6 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
                   ${icons.archive}
                   Archive
                 </button>
-                ${(currentProject.reclaimable_size || 0) > 0 ? `
-                  <button class="btn btn-secondary action-btn-reclaim" id="modal-reclaim-btn" style="color: var(--color-warning); font-size: 0.785rem; padding: 0.4rem 0.65rem;" title="Clean Dependencies & Caches">
-                    ${icons.zap}
-                    Reclaim (${formatBytes(currentProject.reclaimable_size)})
-                  </button>
-                ` : ''}
               </div>
             </div>
 
@@ -561,14 +560,17 @@ export function openProjectInspector(project, categoryConfig = {}, onProjectUpda
       });
     });
 
-    // Reclaim Cache & Dependencies
-    document.getElementById("modal-reclaim-btn")?.addEventListener("click", () => {
-      openReclaimModal(currentProject, (res) => {
-        currentProject.reclaimable_size = res.remaining_reclaimable || 0;
-        renderModal();
-        if (onProjectUpdated) onProjectUpdated(currentProject);
+    // Reclaim Cache & Dependencies from Metric Card
+    const reclaimCard = document.getElementById("modal-metric-reclaim-card");
+    if (reclaimCard && (currentProject.reclaimable_size || 0) > 0) {
+      reclaimCard.addEventListener("click", () => {
+        openReclaimModal(currentProject, (res) => {
+          currentProject.reclaimable_size = res.remaining_reclaimable || 0;
+          renderModal();
+          if (onProjectUpdated) onProjectUpdated(currentProject);
+        });
       });
-    });
+    }
 
     // Copy Terminal CD button
     document.getElementById("modal-copy-cd-btn")?.addEventListener("click", async () => {

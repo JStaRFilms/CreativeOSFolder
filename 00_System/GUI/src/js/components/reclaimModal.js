@@ -7,6 +7,15 @@ import { api, formatBytes } from "../api.js";
 import { getCategoryIconSvg, icons } from "../icons.js";
 import { showToast } from "./toast.js";
 
+function getReclaimTag(path) {
+  const p = (path || "").toLowerCase();
+  if (p.includes("node_modules")) return "Node.js";
+  if (p.includes("venv") || p.includes(".venv") || p.includes("env")) return "Python venv";
+  if (p.includes("__pycache__")) return "Pycache";
+  if (p.includes(".next") || p.includes(".nuxt") || p.includes(".turbo") || p.includes(".cache")) return "Build Cache";
+  return "Cache";
+}
+
 /**
  * Open Single Project Reclaim Inspector Modal
  */
@@ -23,13 +32,13 @@ export async function openReclaimModal(project, onReclaimed) {
   const lookupKey = project.relative_path || project.slug || project.name;
 
   container.innerHTML = `
-    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reclaim-title" style="max-width: 580px;">
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reclaim-title" style="max-width: 520px;">
       <div class="modal-header">
         <div class="modal-title-group">
-          <span class="modal-cat-icon">${catIcon}</span>
+          <span class="modal-cat-icon" style="color: var(--color-warning);">${icons.zap}</span>
           <div>
             <h3 id="reclaim-title" class="modal-title">Reclaim Project Space</h3>
-            <span class="modal-subtitle font-mono">${project.relative_path || project.name}</span>
+            <span class="modal-subtitle font-mono">${project.name} &bull; ${project.relative_path || project.slug}</span>
           </div>
         </div>
         <button class="modal-close-btn" id="reclaim-close-btn" aria-label="Close dialog">
@@ -37,55 +46,35 @@ export async function openReclaimModal(project, onReclaimed) {
         </button>
       </div>
 
-      <div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-        <div id="reclaim-loading-state" class="loading-state" style="padding: 2rem 1rem;">
+      <div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.85rem;">
+        <div id="reclaim-loading-state" class="loading-state" style="padding: 2.5rem 1rem;">
           <div class="spinner"></div>
           <p>Analyzing regenerable directories...</p>
         </div>
 
-        <div id="reclaim-content-wrap" style="display: none; flex-direction: column; gap: 1rem;">
-          <!-- Hero Strip -->
-          <div class="reclaim-hero-strip">
-            <div class="reclaim-hero-left">
-              <div class="reclaim-hero-icon">${icons.zap}</div>
-              <div>
-                <div class="reclaim-hero-title">${project.name}</div>
-                <div class="reclaim-hero-sub font-mono">01_Projects/${project.relative_path || project.slug}/</div>
-              </div>
-            </div>
-            <div class="reclaim-hero-stat">
-              <span id="reclaim-selected-bytes" class="reclaim-hero-badge font-mono">0 B</span>
-              <span class="reclaim-hero-label">Recoverable</span>
-            </div>
+        <div id="reclaim-content-wrap" style="display: none; flex-direction: column; gap: 0.85rem;">
+          <!-- Clean Summary Bar -->
+          <div class="reclaim-summary-bar">
+            <span>Selected: <strong id="reclaim-selected-bytes" class="font-mono">0 B</strong> across <span id="reclaim-selected-count">0 items</span></span>
+            <button type="button" id="reclaim-select-all-btn" class="btn-link-action">Deselect All</button>
           </div>
 
-          <!-- Items Breakdown -->
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <span style="font-size: 0.725rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
-              Detected Caches &amp; Dependencies
-            </span>
-            <button type="button" id="reclaim-select-all-btn" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;">
-              Select All
-            </button>
-          </div>
+          <!-- Single Unified Table Surface -->
+          <div id="reclaim-items-list" class="reclaim-table-surface"></div>
 
-          <div id="reclaim-items-list" class="reclaim-items-container"></div>
-
-          <!-- Safety Notice -->
-          <div class="reclaim-safety-notice">
+          <!-- Minimal Safety Line -->
+          <div class="reclaim-safe-line">
             ${icons.info}
-            <span>
-              <strong>Safe Recovery:</strong> Only regenerable dependencies and caches will be deleted. Source code, notes, and media files are never removed and remain completely safe.
-            </span>
+            <span>Safe: only rebuildable build artifacts &amp; dependencies are deleted. Source code is never touched.</span>
           </div>
         </div>
       </div>
 
       <div class="modal-footer" style="padding: 1rem 1.5rem; justify-content: space-between;">
         <button type="button" class="btn btn-secondary" id="reclaim-cancel-btn">Cancel</button>
-        <button type="button" class="btn btn-danger" id="reclaim-execute-btn" disabled style="display: flex; align-items: center; gap: 0.4rem;">
+        <button type="button" class="btn btn-warning" id="reclaim-execute-btn" disabled style="display: flex; align-items: center; gap: 0.4rem;">
           ${icons.zap}
-          <span id="reclaim-btn-label">Purge &amp; Reclaim</span>
+          <span id="reclaim-btn-label">Reclaim Space</span>
         </button>
       </div>
     </div>
@@ -114,6 +103,7 @@ export async function openReclaimModal(project, onReclaimed) {
     const executeBtn = container.querySelector("#reclaim-execute-btn");
     const btnLabel = container.querySelector("#reclaim-btn-label");
     const selectedBadge = container.querySelector("#reclaim-selected-bytes");
+    const selectedCountEl = container.querySelector("#reclaim-selected-count");
     const selectAllBtn = container.querySelector("#reclaim-select-all-btn");
 
     loadingEl.style.display = "none";
@@ -132,20 +122,20 @@ export async function openReclaimModal(project, onReclaimed) {
 
     // Render list
     listEl.innerHTML = items.map((item, idx) => `
-      <div class="reclaim-item-row is-selected" data-idx="${idx}" data-path="${item.relative_path}" data-size="${item.size}">
-        <div class="reclaim-item-left">
-          <input type="checkbox" class="reclaim-item-checkbox" checked data-idx="${idx}" />
-          <div class="reclaim-item-meta">
-            <span class="reclaim-item-name">
-              <span style="color: var(--color-warning);">${icons.folder}</span>
+      <div class="reclaim-table-row" data-idx="${idx}" data-path="${item.relative_path}" data-size="${item.size}">
+        <div class="reclaim-row-left">
+          <input type="checkbox" class="reclaim-checkbox" checked data-idx="${idx}" />
+          <div class="reclaim-row-info">
+            <div class="reclaim-row-title">
               <span class="font-mono">${item.relative_path}/</span>
-            </span>
-            <span class="reclaim-item-desc">${item.description}</span>
+              <span class="reclaim-pill-tag">${getReclaimTag(item.relative_path)}</span>
+            </div>
+            <span class="reclaim-row-desc">${item.description}</span>
           </div>
         </div>
-        <div class="reclaim-item-right">
-          <span class="reclaim-item-size font-mono">${formatBytes(item.size)}</span>
-          <span class="reclaim-item-files font-mono">${item.file_count || 0} files</span>
+        <div class="reclaim-row-right">
+          <span class="reclaim-row-size font-mono">${formatBytes(item.size)}</span>
+          <span class="reclaim-row-files font-mono">${(item.file_count || 0).toLocaleString()} files</span>
         </div>
       </div>
     `).join("");
@@ -154,29 +144,30 @@ export async function openReclaimModal(project, onReclaimed) {
       let selectedSize = 0;
       let selectedCount = 0;
 
-      listEl.querySelectorAll(".reclaim-item-row").forEach(row => {
-        const checkbox = row.querySelector(".reclaim-item-checkbox");
+      listEl.querySelectorAll(".reclaim-table-row").forEach(row => {
+        const checkbox = row.querySelector(".reclaim-checkbox");
         if (checkbox && checkbox.checked) {
           selectedSize += Number(row.getAttribute("data-size") || 0);
           selectedCount += 1;
-          row.classList.add("is-selected");
+          row.classList.remove("is-muted");
         } else {
-          row.classList.remove("is-selected");
+          row.classList.add("is-muted");
         }
       });
 
       selectedBadge.textContent = formatBytes(selectedSize);
+      if (selectedCountEl) selectedCountEl.textContent = `${selectedCount} item${selectedCount === 1 ? '' : 's'}`;
       executeBtn.disabled = selectedCount === 0;
-      btnLabel.textContent = selectedCount > 0 ? `Purge & Reclaim ${formatBytes(selectedSize)}` : "Select Folders to Reclaim";
+      btnLabel.textContent = selectedCount > 0 ? `Reclaim ${formatBytes(selectedSize)}` : "Select Items to Reclaim";
     };
 
     updateTotals();
 
     // Attach row toggle listeners
-    listEl.querySelectorAll(".reclaim-item-row").forEach(row => {
+    listEl.querySelectorAll(".reclaim-table-row").forEach(row => {
       row.addEventListener("click", (e) => {
         if (e.target.type !== "checkbox") {
-          const cb = row.querySelector(".reclaim-item-checkbox");
+          const cb = row.querySelector(".reclaim-checkbox");
           if (cb) {
             cb.checked = !cb.checked;
             updateTotals();
@@ -184,7 +175,7 @@ export async function openReclaimModal(project, onReclaimed) {
         }
       });
 
-      const cb = row.querySelector(".reclaim-item-checkbox");
+      const cb = row.querySelector(".reclaim-checkbox");
       if (cb) {
         cb.addEventListener("change", updateTotals);
       }
@@ -194,7 +185,7 @@ export async function openReclaimModal(project, onReclaimed) {
     let allSelected = true;
     selectAllBtn.addEventListener("click", () => {
       allSelected = !allSelected;
-      listEl.querySelectorAll(".reclaim-item-checkbox").forEach(cb => {
+      listEl.querySelectorAll(".reclaim-checkbox").forEach(cb => {
         cb.checked = allSelected;
       });
       selectAllBtn.textContent = allSelected ? "Deselect All" : "Select All";
@@ -204,8 +195,8 @@ export async function openReclaimModal(project, onReclaimed) {
     // Execute button
     executeBtn.addEventListener("click", async () => {
       const selectedTargets = [];
-      listEl.querySelectorAll(".reclaim-item-row").forEach(row => {
-        const cb = row.querySelector(".reclaim-item-checkbox");
+      listEl.querySelectorAll(".reclaim-table-row").forEach(row => {
+        const cb = row.querySelector(".reclaim-checkbox");
         if (cb && cb.checked) {
           selectedTargets.push(row.getAttribute("data-path"));
         }
@@ -214,7 +205,7 @@ export async function openReclaimModal(project, onReclaimed) {
       if (selectedTargets.length === 0) return;
 
       executeBtn.disabled = true;
-      executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Purging...</span>`;
+      executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Reclaiming...</span>`;
 
       try {
         const purgeRes = await api.reclaimProject(lookupKey, selectedTargets);
@@ -224,7 +215,7 @@ export async function openReclaimModal(project, onReclaimed) {
       } catch (err) {
         showToast(err.message || "Failed to reclaim space", "error");
         executeBtn.disabled = false;
-        executeBtn.innerHTML = `${icons.zap} <span>Purge &amp; Reclaim</span>`;
+        executeBtn.innerHTML = `${icons.zap} <span>Reclaim Space</span>`;
       }
     });
 
@@ -262,12 +253,12 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
   let currentTab = staleBloat.length > 0 ? "stale" : "all";
 
   container.innerHTML = `
-    <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="bulk-reclaim-title">
+    <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="bulk-reclaim-title" style="max-width: 600px;">
       <div class="modal-header">
         <div class="modal-title-group">
-          <span class="reclaim-hero-icon" style="width: 32px; height: 32px; font-size: 1rem;">${icons.zap}</span>
+          <span class="modal-cat-icon" style="color: var(--color-warning);">${icons.zap}</span>
           <div>
-            <h3 id="bulk-reclaim-title" class="modal-title">Workspace Reclaim Engine</h3>
+            <h3 id="bulk-reclaim-title" class="modal-title">Bulk Cache Recovery</h3>
             <span class="modal-subtitle">Purge dependency caches across inactive projects</span>
           </div>
         </div>
@@ -276,7 +267,7 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
         </button>
       </div>
 
-      <div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+      <div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.85rem;">
         <!-- Tabs -->
         <div class="bulk-reclaim-tabs">
           <button type="button" class="bulk-tab-btn ${currentTab === 'stale' ? 'is-active' : ''}" data-tab="stale">
@@ -290,22 +281,13 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
         </div>
 
         <!-- Summary & Select Bar -->
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span id="bulk-selection-summary" style="font-size: 0.8rem; font-weight: 600; color: var(--text-primary);">
-              0 projects selected
-            </span>
-            <span id="bulk-selection-bytes" class="badge font-mono" style="background-color: rgba(245, 158, 11, 0.12); color: var(--color-warning); font-size: 0.75rem; font-weight: 700;">
-              0 B
-            </span>
-          </div>
-          <button type="button" id="bulk-select-all-btn" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;">
-            Select All
-          </button>
+        <div class="reclaim-summary-bar">
+          <span>Selected: <strong id="bulk-selection-bytes" class="font-mono">0 B</strong> across <span id="bulk-selection-summary">0 projects</span></span>
+          <button type="button" id="bulk-select-all-btn" class="btn-link-action">Deselect All</button>
         </div>
 
-        <!-- Projects Checklist -->
-        <div id="bulk-projects-list-container" class="bulk-projects-list"></div>
+        <!-- Projects Checklist Surface -->
+        <div id="bulk-projects-list-container" class="reclaim-table-surface" style="max-height: 280px;"></div>
 
         <!-- Real-time Execution Console (Shown while or after running) -->
         <div id="bulk-reclaim-console" class="log-console" style="display: none; margin-top: 0.25rem;">
@@ -317,19 +299,17 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
         </div>
 
         <!-- Safety Notice -->
-        <div class="reclaim-safety-notice">
+        <div class="reclaim-safe-line">
           ${icons.info}
-          <span>
-            <strong>Zero Source Code Risk:</strong> Only rebuildable cache folders (e.g. <code>node_modules</code>, <code>.next</code>, <code>dist</code>, <code>.venv</code>) are removed. Everything else is untouched.
-          </span>
+          <span>Safe: only regenerable dependency folders (e.g. <code>node_modules</code>, <code>.venv</code>) are removed.</span>
         </div>
       </div>
 
       <div class="modal-footer" style="padding: 1rem 1.5rem; justify-content: space-between;">
         <button type="button" class="btn btn-secondary" id="bulk-reclaim-cancel-btn">Close</button>
-        <button type="button" class="btn btn-danger" id="bulk-reclaim-execute-btn" style="display: flex; align-items: center; gap: 0.4rem;">
+        <button type="button" class="btn btn-warning" id="bulk-reclaim-execute-btn" style="display: flex; align-items: center; gap: 0.4rem;">
           ${icons.zap}
-          <span id="bulk-reclaim-btn-label">Purge Selected Caches</span>
+          <span id="bulk-reclaim-btn-label">Reclaim Selected Caches</span>
         </button>
       </div>
     </div>
@@ -379,29 +359,30 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
       const isStale = p.is_stale || p.status === "stale" || (p.last_meaningful_update && new Date(p.last_meaningful_update).getTime() < cutoffTime);
 
       return `
-        <div class="bulk-project-card is-selected" data-idx="${idx}" data-path="${p.path || ''}" data-slug="${p.slug || p.name}" data-size="${p.reclaimable_size || 0}">
-          <div class="bulk-project-identity">
-            <input type="checkbox" class="reclaim-item-checkbox" checked data-slug="${p.slug || p.name}" />
-            <span style="display: flex; align-items: center; color: var(--color-primary); flex-shrink: 0;">${icon}</span>
-            <div style="display: flex; flex-direction: column; min-width: 0;">
-              <span class="bulk-project-name">${p.name}</span>
-              <span class="bulk-project-path font-mono">01_Projects/${p.relative_path || p.slug}/</span>
+        <div class="reclaim-table-row" data-idx="${idx}" data-path="${p.path || ''}" data-slug="${p.slug || p.name}" data-size="${p.reclaimable_size || 0}">
+          <div class="reclaim-row-left">
+            <input type="checkbox" class="reclaim-checkbox" checked data-slug="${p.slug || p.name}" />
+            <div class="reclaim-row-info">
+              <div class="reclaim-row-title">
+                <span style="font-weight: 700;">${p.name}</span>
+                <span class="reclaim-pill-tag font-mono">${cat}</span>
+                ${isStale ? '<span class="cell-status-dot dot-stale" title="Stale (>90d)"></span>' : ''}
+              </div>
+              <span class="reclaim-row-desc font-mono">${p.relative_path || p.slug}</span>
             </div>
           </div>
-          <div class="bulk-project-stat">
-            <span class="bulk-project-size font-mono">${formatBytes(p.reclaimable_size || 0)}</span>
-            <span class="bulk-project-stale-tag font-mono">
-              ${isStale ? '<span style="color: var(--color-warning);">Stale (&gt;90d)</span>' : (p.last_meaningful_update ? p.last_meaningful_update.substring(0, 10) : 'Active')}
-            </span>
+          <div class="reclaim-row-right">
+            <span class="reclaim-row-size font-mono">${formatBytes(p.reclaimable_size || 0)}</span>
+            <span class="reclaim-row-files font-mono">${(p.file_count || 0).toLocaleString()} files</span>
           </div>
         </div>
       `;
     }).join("");
 
-    listContainer.querySelectorAll(".bulk-project-card").forEach(card => {
+    listContainer.querySelectorAll(".reclaim-table-row").forEach(card => {
       card.addEventListener("click", (e) => {
         if (e.target.type !== "checkbox") {
-          const cb = card.querySelector(".reclaim-item-checkbox");
+          const cb = card.querySelector(".reclaim-checkbox");
           if (cb) {
             cb.checked = !cb.checked;
             updateSummary();
@@ -409,7 +390,7 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
         }
       });
 
-      const cb = card.querySelector(".reclaim-item-checkbox");
+      const cb = card.querySelector(".reclaim-checkbox");
       if (cb) {
         cb.addEventListener("change", updateSummary);
       }
@@ -422,21 +403,21 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
     let totalBytes = 0;
     let selectedCount = 0;
 
-    listContainer.querySelectorAll(".bulk-project-card").forEach(card => {
-      const cb = card.querySelector(".reclaim-item-checkbox");
+    listContainer.querySelectorAll(".reclaim-table-row").forEach(card => {
+      const cb = card.querySelector(".reclaim-checkbox");
       if (cb && cb.checked) {
         totalBytes += Number(card.getAttribute("data-size") || 0);
         selectedCount += 1;
-        card.classList.add("is-selected");
+        card.classList.remove("is-muted");
       } else {
-        card.classList.remove("is-selected");
+        card.classList.add("is-muted");
       }
     });
 
-    summaryCount.textContent = `${selectedCount} project${selectedCount === 1 ? '' : 's'} selected`;
+    summaryCount.textContent = `${selectedCount} project${selectedCount === 1 ? '' : 's'}`;
     summaryBytes.textContent = formatBytes(totalBytes);
     executeBtn.disabled = selectedCount === 0;
-    btnLabel.textContent = selectedCount > 0 ? `Purge & Reclaim ${formatBytes(totalBytes)}` : "Select Projects";
+    btnLabel.textContent = selectedCount > 0 ? `Reclaim ${formatBytes(totalBytes)}` : "Select Projects";
   }
 
   // Switch tab buttons
@@ -453,7 +434,7 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
   let allSelected = true;
   selectAllBtn.addEventListener("click", () => {
     allSelected = !allSelected;
-    listContainer.querySelectorAll(".reclaim-item-checkbox").forEach(cb => {
+    listContainer.querySelectorAll(".reclaim-checkbox").forEach(cb => {
       cb.checked = allSelected;
     });
     selectAllBtn.textContent = allSelected ? "Deselect All" : "Select All";
@@ -463,8 +444,8 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
   // Execute Bulk Reclaim
   executeBtn.addEventListener("click", async () => {
     const selectedSlugs = [];
-    listContainer.querySelectorAll(".bulk-project-card").forEach(card => {
-      const cb = card.querySelector(".reclaim-item-checkbox");
+    listContainer.querySelectorAll(".reclaim-table-row").forEach(card => {
+      const cb = card.querySelector(".reclaim-checkbox");
       if (cb && cb.checked) {
         selectedSlugs.push(card.getAttribute("data-slug"));
       }
@@ -473,9 +454,9 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
     if (selectedSlugs.length === 0) return;
 
     executeBtn.disabled = true;
-    executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Purging Caches...</span>`;
+    executeBtn.innerHTML = `<div class="spinner spinner-sm" style="width: 14px; height: 14px;"></div> <span>Reclaiming Caches...</span>`;
     consoleEl.style.display = "block";
-    consoleStatus.textContent = "Running Purge...";
+    consoleStatus.textContent = "Running Reclaim...";
     consoleBody.innerHTML = `<div class="log-entry log-info"><span>[Engine]</span> <span>Starting bulk reclaim for ${selectedSlugs.length} projects...</span></div>`;
 
     try {
@@ -488,7 +469,7 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
         logEntries.forEach(entry => {
           consoleBody.innerHTML += `
             <div class="log-entry log-purge">
-              <span>[Purged]</span>
+              <span>[Reclaimed]</span>
               <span>${entry.project} / ${entry.folder} &rarr; Freed ${formatBytes(entry.freed_bytes || 0)}</span>
             </div>
           `;
@@ -522,7 +503,7 @@ export function openBulkReclaimModal(storageData, onReclaimed) {
       consoleStatus.textContent = "Error";
       showToast(err.message || "Bulk reclaim failed", "error");
       executeBtn.disabled = false;
-      executeBtn.innerHTML = `${icons.zap} <span>Purge Selected Caches</span>`;
+      executeBtn.innerHTML = `${icons.zap} <span>Reclaim Selected Caches</span>`;
     }
   });
 
