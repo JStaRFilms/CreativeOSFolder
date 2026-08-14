@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import json
 import shutil
 import datetime
+import threading
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
@@ -212,8 +214,40 @@ class ReclaimBulkRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Core API Endpoints
+# Core API Endpoints & Managed Lifecycle
 # ──────────────────────────────────────────────────────────────────────────────
+
+_LAST_HEARTBEAT_TIME = time.time()
+_LEAVE_SIGNAL_TIME = 0.0
+_MANAGED_MODE = os.environ.get("CREATIVEOS_MANAGED", "").strip().lower() in ("1", "true", "yes")
+_WATCHDOG_STARTED = False
+
+def _start_managed_watchdog():
+    """Starts a background daemon thread that shuts down the server ONLY when the client window is explicitly closed."""
+    global _WATCHDOG_STARTED
+    if not _MANAGED_MODE or _WATCHDOG_STARTED:
+        return
+    _WATCHDOG_STARTED = True
+
+    def _watchdog_loop():
+        # Allow 30s initial grace period for browser window to launch
+        time.sleep(30.0)
+        while True:
+            time.sleep(1.0)
+            now = time.time()
+            
+            # ONLY exit if the browser window explicitly sent the leave beacon (on window close/page unload)
+            # AND no new heartbeat arrived to contradict it
+            if _LEAVE_SIGNAL_TIME > 0 and (now - _LEAVE_SIGNAL_TIME) >= 4.0 and _LAST_HEARTBEAT_TIME <= _LEAVE_SIGNAL_TIME:
+                logger.info("CreativeOS GUI window was closed by user. Cleanly shutting down background server.")
+                os._exit(0)
+
+    t = threading.Thread(target=_watchdog_loop, daemon=True)
+    t.start()
+
+# Initialize watchdog on module load if managed mode is active
+_start_managed_watchdog()
+
 
 @app.get("/api/health")
 def get_health() -> dict[str, Any]:
@@ -226,7 +260,25 @@ def get_health() -> dict[str, Any]:
         "exports_path": EXPORTS_PATH,
         "archive_path": ARCHIVE_PATH,
         "shuttle_path": SHUTTLE_PATH,
+        "managed": _MANAGED_MODE,
     }
+
+
+@app.post("/api/system/heartbeat")
+def post_heartbeat() -> dict[str, Any]:
+    """Record alive ping from active GUI web client."""
+    global _LAST_HEARTBEAT_TIME, _LEAVE_SIGNAL_TIME
+    _LAST_HEARTBEAT_TIME = time.time()
+    _LEAVE_SIGNAL_TIME = 0.0  # Clear any leave signal
+    return {"status": "ok", "managed": _MANAGED_MODE}
+
+
+@app.post("/api/system/leave")
+def post_leave() -> dict[str, Any]:
+    """Signal from client closing window to prompt clean shutdown in managed mode."""
+    global _LEAVE_SIGNAL_TIME
+    _LEAVE_SIGNAL_TIME = time.time()
+    return {"status": "ok", "managed": _MANAGED_MODE}
 
 
 # Server in-memory caching

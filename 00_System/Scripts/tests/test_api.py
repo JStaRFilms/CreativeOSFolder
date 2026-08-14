@@ -17,6 +17,17 @@ def test_health_endpoint(client):
     assert data["status"] == "ok"
     assert "version" in data
     assert "projects_path" in data
+    assert "managed" in data
+
+
+def test_heartbeat_and_leave_endpoints(client):
+    resp_hb = client.post("/api/system/heartbeat")
+    assert resp_hb.status_code == 200
+    assert resp_hb.json()["status"] == "ok"
+
+    resp_leave = client.post("/api/system/leave")
+    assert resp_leave.status_code == 200
+    assert resp_leave.json()["status"] == "ok"
 
 
 def test_categories_endpoint(client):

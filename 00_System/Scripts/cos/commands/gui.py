@@ -29,6 +29,8 @@ spawn new projects, and synchronize your Obsidian knowledge base.\
         epilog="""\
 Examples:
   cos gui                     Launch Web GUI on http://127.0.0.1:8787
+  cos gui --app               Launch in self-contained standalone desktop app mode
+  cos gui --install-shortcut  Create Desktop and Start Menu shortcuts for taskbar
   cos gui --port 9000         Launch Web GUI on custom port 9000
   cos gui --no-browser        Launch backend server without opening browser
   cos gui --reload            Launch with auto-reload for local UI development\
@@ -37,6 +39,16 @@ Examples:
         add_help=False,
     )
 
+    p_gui.add_argument(
+        "-a", "--app",
+        action="store_true",
+        help="Launch in self-contained standalone desktop app mode.",
+    )
+    p_gui.add_argument(
+        "--install-shortcut",
+        action="store_true",
+        help="Create Windows Desktop and Start Menu shortcuts with icon.",
+    )
     p_gui.add_argument(
         "-p", "--port",
         type=int,
@@ -67,7 +79,31 @@ Examples:
 
 
 def cmd_gui(args: argparse.Namespace) -> None:
-    """Launch the FastAPI server and open the browser."""
+    """Launch the FastAPI server and open the browser, or start in app mode."""
+    if getattr(args, "install_shortcut", False):
+        from ..launcher import install_desktop_shortcuts
+        created = install_desktop_shortcuts()
+        if created:
+            paths_str = "\n".join(f"  • [green]{p}[/green]" for p in created)
+            console.print(
+                Panel.fit(
+                    f"[bold green]✨ CreativeOS Desktop Shortcuts Installed![/bold green]\n\n"
+                    f"{paths_str}\n\n"
+                    f"[dim]Right-click the Desktop or Start Menu shortcut and select [bold]'Pin to taskbar'[/bold].[/dim]",
+                    title="🚀 Shortcut Installer",
+                    border_style="green",
+                    padding=(1, 2),
+                )
+            )
+        else:
+            console.print("[yellow]⚠️ Could not create shortcuts (only supported on Windows).[/yellow]")
+        return
+
+    if getattr(args, "app", False):
+        from ..launcher import run_app_lifecycle
+        run_app_lifecycle(host=args.host, port=args.port, reload=getattr(args, "reload", False))
+        return
+
     try:
         import uvicorn
     except ImportError:

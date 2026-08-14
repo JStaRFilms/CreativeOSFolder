@@ -150,10 +150,12 @@ cos sync
 | `travel` | Copy active project to shuttle drive | `cos travel` |
 | `resurrect` | Restore an archived project to active | `cos resurrect "Old Project"` |
 
-### Management
-
+### Management & Studio
 | Command | Description | Example |
 |---------|-------------|---------|
+| `gui` | Launch visual Web Studio in browser | `cos gui` |
+| `gui --install-shortcut` | Build `CreativeOS.exe` and create Desktop/Taskbar shortcut | `cos gui --install-shortcut` |
+| `app` | Launch standalone self-contained desktop app | `cos app` |
 | `setup` | Configure CreativeOS (paths, categories, reset) | `cos setup` |
 | `config` | View and edit configuration | `cos config show` |
 | `category` | Manage project categories | `cos category list` |
@@ -257,6 +259,32 @@ C:\CreativeOS\01_Projects\Video\2026_Nike_Ad\04_Exports\Social_Media\Revisions\
 ---
 
 ## 🔧 Command Reference
+
+### `cos gui` & `cos app` — Visual Studio Hub & Desktop App
+
+CreativeOS includes a visual Web GUI and a native self-contained desktop launcher.
+
+```bash
+# 1. Launch in your default browser (foreground terminal server)
+cos gui
+
+# 2. Launch in standalone desktop app mode
+cos app
+# or
+cos gui --app
+
+# 3. Create Windows Desktop / Start Menu shortcut (pin-ready to Taskbar)
+cos gui --install-shortcut
+```
+
+#### Self-Contained Desktop App (`CreativeOS.exe`)
+When you run `cos gui --install-shortcut`:
+1. It automatically compiles a native Windows executable (`CreativeOS.exe`) using the built-in Windows C# compiler (`csc.exe`).
+2. Creates `CreativeOS.lnk` on your Desktop and Start Menu with the official icon embedded.
+3. You can right-click the Desktop shortcut and click **"Pin to taskbar"**.
+4. Clicking the taskbar icon automatically starts the background server, launches the standalone frameless Edge/Chrome app window, and cleanly shuts down the server when the window is closed.
+
+---
 
 ### `cos storage` — Project Storage Review
 

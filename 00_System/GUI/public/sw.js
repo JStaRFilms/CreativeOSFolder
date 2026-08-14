@@ -1,4 +1,4 @@
-const CACHE_NAME = "creativeos-gui-v1";
+const CACHE_NAME = "creativeos-gui-v2";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -39,10 +39,33 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Network-first for HTML pages and Vite hashed assets (they change on rebuild)
+  const isNavigate = event.request.mode === "navigate";
+  const isAsset = url.pathname.startsWith("/assets/");
+
+  if (isNavigate || isAsset) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cached) => {
+            return cached || caches.match("/index.html");
+          });
+        })
+    );
+    return;
+  }
+
+  // Cache-first for static assets (icons, manifest)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch fresh copy in background to update cache
         fetch(event.request)
           .then((networkResponse) => {
             if (networkResponse && networkResponse.status === 200) {
@@ -55,7 +78,6 @@ self.addEventListener("fetch", (event) => {
         return cachedResponse;
       }
       return fetch(event.request).catch(() => {
-        // If offline and request is an HTML page, return root cached page
         if (event.request.headers.get("accept")?.includes("text/html")) {
           return caches.match("/index.html");
         }
