@@ -181,8 +181,45 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ path }),
   }),
+  openFile: (path) => request("/fs/open", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  }),
   getRawFileUrl: (path) => `/api/fs/raw?path=${encodeURIComponent(path)}`,
   getFileContent: (path, maxBytes = 500000) => request(`/fs/content?path=${encodeURIComponent(path)}&max_bytes=${maxBytes}`),
+  transfer: (payload) => request("/fs/transfer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
+  cleanDownloads: (folder = null) => request("/system/clean-downloads", {
+    method: "POST",
+    body: JSON.stringify({ folder }),
+  }),
+  sortExportsInbox: (inbox_path = null) => request("/exports/sort-inbox", {
+    method: "POST",
+    body: JSON.stringify({ inbox_path }),
+  }),
+  cloneProject: async (payload) => {
+    const res = await request("/projects/clone", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    cacheStore.invalidate("projects");
+    cacheStore.invalidate("storage");
+    return res;
+  },
+  initProject: async (payload) => {
+    const res = await request("/projects/init", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    cacheStore.invalidate("projects");
+    cacheStore.invalidate("storage");
+    return res;
+  },
+  createExportFolder: (name) => request(`/projects/${encodeURIComponent(name)}/export-folder`, {
+    method: "POST",
+  }),
 
   // Storage & Reclaim
   getStorage: () => request("/storage"),
