@@ -28,14 +28,18 @@ export function setUiMode(mode) {
   const cleanMode = mode === "classic" ? "classic" : "win11";
   localStorage.setItem("cos_ui_mode", cleanMode);
   document.documentElement.setAttribute("data-ui-mode", cleanMode);
+  document.body?.setAttribute("data-ui-mode", cleanMode);
+
+  const header = document.querySelector(".app-header");
+  if (header) {
+    header.style.display = cleanMode === "win11" ? "none" : "";
+  }
+
   updateSwitcherPillUI(cleanMode);
 
   // If switching to win11, ensure we route to explorer if currently on dashboard
   if (cleanMode === "win11" && (!window.location.hash || window.location.hash === "#dashboard")) {
     window.location.hash = "#explorer";
-  } else if (cleanMode === "classic" && window.location.hash === "#explorer") {
-    // Maintain path if switching
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
   } else {
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   }
@@ -62,6 +66,11 @@ export function initRouter(containerId = "app-main") {
   // Initialize UI mode state
   const currentMode = getUiMode();
   document.documentElement.setAttribute("data-ui-mode", currentMode);
+  document.body?.setAttribute("data-ui-mode", currentMode);
+  const header = document.querySelector(".app-header");
+  if (header) {
+    header.style.display = currentMode === "win11" ? "none" : "";
+  }
   updateSwitcherPillUI(currentMode);
 
   // Attach Switcher Pill Event Handlers
@@ -101,6 +110,11 @@ export function initRouter(containerId = "app-main") {
         el.classList.remove("active");
       }
     });
+
+    const header = document.querySelector(".app-header");
+    if (header) {
+      header.style.display = uiMode === "win11" ? "none" : "";
+    }
 
     // Render corresponding view based on active Experience Mode
     if (uiMode === "win11" && (routeKey === "#explorer" || routeKey === "#dashboard")) {

@@ -2379,25 +2379,57 @@ body {
   font-weight: 700;
 }
 
-/* Full-bleed Container for Windows 11 Native Engine */
-.main-content.is-win11-engine {
-  max-width: 100%;
-  padding: 0.5rem 1rem 1rem;
+/* ──────────────────────────────────────────────────────────────────────────
+   Full-Bleed Native Desktop Viewport for Windows 11 Engine
+   Hides the website nav bar and gives full screen to the native explorer.
+   ────────────────────────────────────────────────────────────────────────── */
+html[data-ui-mode="win11"],
+body[data-ui-mode="win11"] {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  width: 100vw !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Windows 11 Native 3-Zone Desktop Explorer View
-   ────────────────────────────────────────────────────────────────────────── */
+body[data-ui-mode="win11"] .app-header {
+  display: none !important;
+}
+
+body[data-ui-mode="win11"] .app-container {
+  height: 100vh !important;
+  min-height: 100vh !important;
+  max-height: 100vh !important;
+  width: 100vw !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.main-content.is-win11-engine {
+  max-width: 100vw !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
 
 .win11-explorer-root {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
-  min-height: calc(100vh - 120px);
+  height: 100vh;
+  max-height: 100vh;
+  width: 100vw;
 }
 
 /* Windows 11 Tabs Bar */
@@ -2842,8 +2874,8 @@ body {
 /* View 1: Grid View */
 .win11-grid-view {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  gap: 12px 6px;
   padding: 1rem;
 }
 
@@ -2852,55 +2884,65 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 0.75rem 0.5rem;
-  border-radius: var(--radius-md);
+  padding: 6px 4px 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background-color: transparent;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
   user-select: none;
 }
 
 .win11-file-tile:hover {
   background-color: var(--bg-surface-hover);
-  border-color: var(--border-subtle);
 }
 
 .win11-file-tile.is-selected {
-  background-color: var(--color-primary-light);
-  border-color: var(--color-primary);
+  background-color: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .win11-tile-preview {
-  width: 48px;
+  width: 58px;
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.8rem;
-  color: var(--color-primary);
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.win11-tile-img-thumb {
+  max-width: 54px;
+  max-height: 44px;
+  border-radius: 3px;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.win11-tile-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.win11-tile-icon-wrap svg {
+  width: 38px;
+  height: 38px;
 }
 
 .win11-tile-name {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-family: var(--font-segoe, 'Segoe UI Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  font-size: 0.775rem;
+  font-weight: 400;
   color: var(--text-primary);
-  line-height: 1.3;
-  max-width: 100%;
+  line-height: 1.25;
+  max-width: 96px;
+  word-break: break-word;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.win11-tile-meta {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  margin-top: 0.2rem;
-  display: flex;
-  gap: 0.25rem;
 }
 
 /* View 2: Details Table */
@@ -3292,9 +3334,16 @@ body {
 }
 
 .win11-hero-icon {
-  font-size: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-primary);
   margin-bottom: 0.5rem;
+}
+
+.win11-hero-icon svg {
+  width: 48px;
+  height: 48px;
 }
 
 .win11-hero-image {
@@ -3303,6 +3352,29 @@ body {
   border-radius: var(--radius-sm);
   margin-bottom: 0.5rem;
   object-fit: cover;
+}
+
+.win11-hero-media-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.win11-hero-video {
+  width: 100%;
+  max-height: 180px;
+  border-radius: var(--radius-sm);
+  background-color: #000;
+  border: 1px solid var(--border-subtle);
+  outline: none;
+}
+
+.win11-hero-audio {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  outline: none;
 }
 
 .win11-hero-title {
@@ -3424,6 +3496,38 @@ body {
 
 .win11-status-sep {
   color: var(--border-strong);
+}
+
+.win11-status-right {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.win11-status-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.win11-status-view-btn:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.win11-status-view-btn.active {
+  background-color: var(--bg-surface);
+  border-color: var(--border-subtle);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-xs);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

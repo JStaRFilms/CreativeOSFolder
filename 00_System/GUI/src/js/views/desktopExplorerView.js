@@ -20,6 +20,7 @@ import { toggleTheme } from "../theme.js";
 import { openNewProjectModal } from "../components/newProjectModal.js";
 import { openBulkReclaimModal, openReclaimModal } from "../components/reclaimModal.js";
 import { openLiveSyncModal, openProjectInspector, openConfirmModal } from "../components/modal.js";
+import { setUiMode } from "../router.js";
 
 function escapeHtml(str) {
   return String(str || "")
@@ -149,21 +150,13 @@ export async function renderDesktopExplorer(container, initialPath = "") {
 
         <!-- View Engine Selector -->
         <div class="win11-ribbon-group">
-          <button class="win11-ribbon-btn ${viewMode === 'grid' ? 'active' : ''}" id="win11-btn-view-grid" title="Large Icons Grid">
-            ${icons.grid}
-            <span>Grid</span>
+          <button class="win11-ribbon-btn" id="win11-btn-view-toggle" title="Toggle between Large Icons and Details Table">
+            ${viewMode === 'grid' ? icons.grid : icons.table}
+            <span id="win11-view-toggle-text">${viewMode === 'grid' ? 'Large Icons' : 'Details'}</span>
           </button>
-          <button class="win11-ribbon-btn ${viewMode === 'details' ? 'active' : ''}" id="win11-btn-view-details" title="Details Table View">
-            ${icons.table}
-            <span>Details</span>
-          </button>
-          <button class="win11-ribbon-btn ${viewMode === 'split' ? 'active' : ''}" id="win11-btn-view-split" title="Dual-Pane External RAID Bridge">
+          <button class="win11-ribbon-btn ${viewMode === 'split' ? 'active' : ''}" id="win11-btn-view-split" title="Dual-Pane Ingest Bridge">
             ${icons.split}
             <span>RAID Ingest</span>
-          </button>
-          <button class="win11-ribbon-btn ${viewMode === 'media' ? 'active' : ''}" id="win11-btn-view-media" title="4K Media Scrubber & Waveform Player">
-            ${icons.media}
-            <span>Media Player</span>
           </button>
         </div>
 
@@ -192,6 +185,11 @@ export async function renderDesktopExplorer(container, initialPath = "") {
         <div class="win11-ribbon-divider"></div>
 
         <div class="win11-ribbon-group win11-ribbon-right">
+          <button class="win11-ribbon-btn win11-classic-switch-btn" id="win11-btn-switch-classic" title="Switch to Studio Classic Dashboard" style="color: var(--color-primary); font-weight: 600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <span>Classic Studio</span>
+          </button>
+          <div class="win11-ribbon-divider" style="height: 18px; margin: 0 2px;"></div>
           <button class="win11-ribbon-btn" id="win11-btn-theme-toggle" title="Toggle Light / Dark Theme">
             ${icons.eye}
             <span>Theme</span>
@@ -326,7 +324,12 @@ export async function renderDesktopExplorer(container, initialPath = "") {
           <span id="win11-status-selection">No item selected</span>
         </div>
         <div class="win11-status-right">
-          <span class="font-mono" id="win11-status-storage-summary">CreativeOS Studio Engine</span>
+          <button class="win11-status-view-btn ${viewMode === 'details' ? 'active' : ''}" id="status-btn-view-details" title="Details Table View">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+          <button class="win11-status-view-btn ${viewMode === 'grid' ? 'active' : ''}" id="status-btn-view-grid" title="Large Icons Grid View">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </button>
         </div>
       </footer>
     </div>
@@ -456,20 +459,37 @@ export async function renderDesktopExplorer(container, initialPath = "") {
   }
 
   function updateSidebarBadges() {
-    if (!projectsList) return;
+    if (!projectsList || !Array.isArray(projectsList)) return;
     const catCounts = {
       Video: 0, Code: 0, Audio: 0, AI: 0, Design: 0, Photo: 0, Clients: 0
     };
+    const clientSet = new Set();
 
     projectsList.forEach(p => {
-      const cat = p.type || "Video";
-      if (p.client && p.client !== "None") {
-        catCounts.Clients = (catCounts.Clients || 0) + 1;
+      const cl = p.client && p.client !== "None" && p.client !== "internal" ? p.client : null;
+      if (cl) clientSet.add(cl);
+
+      let c = (p.type || p.category || "").toLowerCase();
+      if (!c && p.path) {
+        const norm = p.path.replace(/\\/g, "/");
+        if (norm.includes("/Video/")) c = "video";
+        else if (norm.includes("/Code/")) c = "code";
+        else if (norm.includes("/Audio/") || norm.includes("/Music/")) c = "audio";
+        else if (norm.includes("/AI/")) c = "ai";
+        else if (norm.includes("/Design/") || norm.includes("/3D/")) c = "design";
+        else if (norm.includes("/Photo/")) c = "photo";
       }
-      if (catCounts[cat] !== undefined) {
-        catCounts[cat]++;
-      }
+
+      if (c.includes("video")) catCounts.Video++;
+      else if (c.includes("code")) catCounts.Code++;
+      else if (c.includes("audio") || c.includes("music") || c.includes("podcast")) catCounts.Audio++;
+      else if (c.includes("ai")) catCounts.AI++;
+      else if (c.includes("design") || c.includes("3d")) catCounts.Design++;
+      else if (c.includes("photo")) catCounts.Photo++;
+      else catCounts.Video++;
     });
+
+    catCounts.Clients = clientSet.size || projectsList.filter(p => p.client && p.client !== "None").length;
 
     Object.entries(catCounts).forEach(([cat, count]) => {
       const el = document.getElementById(`badge-cat-${cat}`);
@@ -607,24 +627,25 @@ export async function renderDesktopExplorer(container, initialPath = "") {
         <div class="win11-grid-view">
           ${filtered.map(entry => {
             const isDir = entry.is_dir;
-            const iconSvg = getFileIconSvg(entry.extension, isDir);
             const isSel = selectedItem && selectedItem.path === entry.path;
-            const sizeStr = isDir ? "Folder" : formatBytes(entry.size);
-            const modDate = entry.modified ? entry.modified.substring(0, 10) : "";
+            const ext = (entry.extension || "").toLowerCase().replace(/^\./, "");
+            const isImg = ["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(ext);
+
+            let previewHtml = "";
+            if (isDir) {
+              previewHtml = icons.folderLarge;
+            } else if (isImg) {
+              previewHtml = `<img src="${api.getRawFileUrl(entry.path)}" class="win11-tile-img-thumb" loading="lazy" alt="" />`;
+            } else {
+              previewHtml = `<div class="win11-tile-icon-wrap">${getFileIconSvg(entry.extension, false)}</div>`;
+            }
 
             return `
-              <div class="win11-file-tile ${isDir ? 'is-folder' : 'is-file'} ${isSel ? 'is-selected' : ''}" data-path="${entry.path}" data-isdir="${isDir}" tabindex="0" role="button">
+              <div class="win11-file-tile ${isDir ? 'is-folder' : 'is-file'} ${isSel ? 'is-selected' : ''}" data-path="${entry.path}" data-isdir="${isDir}" tabindex="0" role="button" title="${escapeHtml(entry.name)}">
                 <div class="win11-tile-preview">
-                  ${iconSvg}
+                  ${previewHtml}
                 </div>
-                <div class="win11-tile-details">
-                  <span class="win11-tile-name font-mono" title="${entry.name}">${escapeHtml(entry.name)}</span>
-                  <div class="win11-tile-meta font-mono">
-                    <span>${sizeStr}</span>
-                    <span>&bull;</span>
-                    <span>${modDate}</span>
-                  </div>
-                </div>
+                <div class="win11-tile-name">${escapeHtml(entry.name)}</div>
               </div>
             `;
           }).join("")}
@@ -1178,9 +1199,33 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     const rawUrl = api.getRawFileUrl(item.path);
     const ext = (item.extension || "").toLowerCase();
     const isImage = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"].includes(ext);
+    const isVideo = [".mp4", ".mov", ".mkv", ".webm", ".avi"].includes(ext);
+    const isAudio = [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"].includes(ext);
 
     // Check if this directory corresponds to a known project
     const matchedProject = projectsList.find(p => p.path === item.path || p.name === item.name || p.slug === item.name);
+
+    let heroPreview = "";
+    if (isImage) {
+      heroPreview = `<img src="${rawUrl}" class="win11-hero-image" alt="${escapeHtml(item.name)}" />`;
+    } else if (isVideo) {
+      heroPreview = `
+        <div class="win11-hero-media-wrap">
+          <video src="${rawUrl}" controls preload="metadata" class="win11-hero-video"></video>
+        </div>
+      `;
+    } else if (isAudio) {
+      heroPreview = `
+        <div class="win11-hero-media-wrap">
+          <div class="win11-hero-icon" style="color: var(--color-accent-cyan); margin-bottom: 6px;">${icons.audio}</div>
+          <audio src="${rawUrl}" controls preload="metadata" class="win11-hero-audio"></audio>
+        </div>
+      `;
+    } else if (isDir) {
+      heroPreview = `<div class="win11-hero-icon">${icons.folderLarge}</div>`;
+    } else {
+      heroPreview = `<div class="win11-hero-icon">${getFileIconSvg(item.extension, false)}</div>`;
+    }
 
     inspectorEl.innerHTML = `
       <div class="win11-inspector-header">
@@ -1191,11 +1236,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
       <div class="win11-inspector-scroll">
         <!-- Preview Hero -->
         <div class="win11-inspector-hero">
-          ${isImage ? `
-            <img src="${rawUrl}" class="win11-hero-image" alt="${escapeHtml(item.name)}" />
-          ` : `
-            <div class="win11-hero-icon">${getFileIconSvg(item.extension, isDir)}</div>
-          `}
+          ${heroPreview}
           <div class="win11-hero-title font-mono" title="${item.name}">${escapeHtml(item.name)}</div>
           <span class="win11-hero-badge font-mono">${isDir ? (matchedProject ? `${matchedProject.type} Project` : 'Folder') : formatBytes(item.size)}</span>
         </div>
@@ -1384,40 +1425,47 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     openNewProjectModal(() => loadCurrentDirectory());
   });
 
-  document.getElementById("win11-btn-view-grid")?.addEventListener("click", () => {
-    viewMode = "grid";
-    localStorage.setItem("cos_win11_view_mode", "grid");
+  function updateViewButtons() {
+    const isGrid = viewMode === "grid";
+    const toggleBtn = document.getElementById("win11-btn-view-toggle");
+    if (toggleBtn) {
+      toggleBtn.innerHTML = `
+        ${isGrid ? icons.grid : icons.table}
+        <span id="win11-view-toggle-text">${isGrid ? 'Large Icons' : 'Details'}</span>
+      `;
+    }
+    document.getElementById("win11-btn-view-split")?.classList.toggle("active", viewMode === "split");
+    document.getElementById("status-btn-view-details")?.classList.toggle("active", viewMode === "details");
+    document.getElementById("status-btn-view-grid")?.classList.toggle("active", viewMode === "grid");
+  }
+
+  document.getElementById("win11-btn-view-toggle")?.addEventListener("click", () => {
+    viewMode = viewMode === "grid" ? "details" : "grid";
+    localStorage.setItem("cos_win11_view_mode", viewMode);
     updateViewButtons();
     loadCurrentDirectory();
   });
 
-  document.getElementById("win11-btn-view-details")?.addEventListener("click", () => {
+  document.getElementById("status-btn-view-details")?.addEventListener("click", () => {
     viewMode = "details";
     localStorage.setItem("cos_win11_view_mode", "details");
     updateViewButtons();
     loadCurrentDirectory();
   });
 
+  document.getElementById("status-btn-view-grid")?.addEventListener("click", () => {
+    viewMode = "grid";
+    localStorage.setItem("cos_win11_view_mode", "grid");
+    updateViewButtons();
+    loadCurrentDirectory();
+  });
+
   document.getElementById("win11-btn-view-split")?.addEventListener("click", () => {
-    viewMode = "split";
-    localStorage.setItem("cos_win11_view_mode", "split");
+    viewMode = viewMode === "split" ? "grid" : "split";
+    localStorage.setItem("cos_win11_view_mode", viewMode);
     updateViewButtons();
     loadCurrentDirectory();
   });
-
-  document.getElementById("win11-btn-view-media")?.addEventListener("click", () => {
-    viewMode = "media";
-    localStorage.setItem("cos_win11_view_mode", "media");
-    updateViewButtons();
-    loadCurrentDirectory();
-  });
-
-  function updateViewButtons() {
-    document.querySelectorAll("#win11-btn-view-grid, #win11-btn-view-details, #win11-btn-view-split, #win11-btn-view-media").forEach(btn => {
-      btn.classList.remove("active");
-    });
-    document.getElementById(`win11-btn-view-${viewMode}`)?.classList.add("active");
-  }
 
   document.getElementById("win11-btn-clean-downloads")?.addEventListener("click", async () => {
     try {
@@ -1478,7 +1526,12 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     renderCanvasEntries();
   });
 
+  document.getElementById("win11-btn-switch-classic")?.addEventListener("click", () => {
+    setUiMode("classic");
+  });
+
   // Kickoff
   renderTabsBar();
+  updateSidebarBadges();
   loadCurrentDirectory();
 }
