@@ -145,6 +145,17 @@ def _get_allowed_roots() -> list[Path]:
             except Exception:
                 pass
 
+    # Configured External Storage Mounts
+    try:
+        raw_cfg = _load_config()
+        for m in raw_cfg.get("external_mounts", []):
+            if isinstance(m, dict) and "path" in m:
+                mp = Path(m["path"]).resolve()
+                if mp.exists():
+                    roots.append(mp)
+    except Exception:
+        pass
+
     seen: set[Path] = set()
     deduped_roots: list[Path] = []
     for r in roots:
@@ -329,6 +340,21 @@ class TransferRequest(BaseModel):
     destination: str = Field(..., description="Destination directory or target path")
     move: bool = Field(default=False, description="Move if True, copy if False")
     overwrite: bool = Field(default=False, description="Whether to overwrite existing destination files")
+
+
+class UpdateMountsRequest(BaseModel):
+    mounts: list[dict[str, Any]] = Field(..., description="List of external drive or directory mounts")
+
+
+class UpdateCategoriesRequest(BaseModel):
+    categories: dict[str, Any] = Field(..., description="Full categories configuration dictionary")
+    default_category: Optional[str] = Field(default=None, description="Default category name")
+
+
+class DeletePathRequest(BaseModel):
+    path: str = Field(..., description="Filesystem path of file or folder to delete")
+    permanent: bool = Field(default=False, description="If True, delete permanently without Recycle Bin")
+    recycle_bin: bool = Field(default=True, description="If True on Windows, move to Recycle Bin")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -944,28 +970,67 @@ def update_project(project_name: str, req: UpdateProjectRequest) -> dict[str, An
 
 @app.post("/api/projects/{name:path}/export-folder")
 def create_project_export_folder(name: str) -> dict[str, Any]:
-    """Resolve project directory and locate/create 02_Exports/YYYY/MM/<project_name> with Video/, Thumbnail/, and Audio/ subfolders."""
+    """Resolve project directory and locate/create 02_Exports/YYYY/MM/<project_name> with Video/, Thumbnail/, and Audio/ subfolders based on project creation date."""
     proj_path, meta = _find_project_dir(name)
     project_slug = meta.get("slug") or meta.get("name") or proj_path.name
 
-    now = datetime.datetime.now()
-    year = now.strftime("%Y")
-    month_num = now.strftime("%m")
-    month_name = now.strftime("%B")
-    month_full = f"{month_num} - {month_name}"
-
-    # Check if monthly export structure exists with either format
     base_exports = Path(EXPORTS_PATH)
-    candidate_named = base_exports / year / month_full / project_slug
-    candidate_num = base_exports / year / month_num / project_slug
 
-    if candidate_named.parent.exists():
-        export_dir = candidate_named
-    elif candidate_num.parent.exists():
-        export_dir = candidate_num
+    # 1. Check if an export folder already exists for this project under 02_Exports/
+    existing_export = None
+    if base_exports.exists():
+        try:
+            for candidate in base_exports.glob(f"*/*/{project_slug}"):
+                if candidate.is_dir():
+                    existing_export = candidate
+                    break
+            if not existing_export:
+                for candidate in base_exports.glob(f"*/*/*/{project_slug}"):
+                    if candidate.is_dir():
+                        existing_export = candidate
+                        break
+        except Exception:
+            existing_export = None
+
+    if existing_export:
+        export_dir = existing_export
     else:
-        # Default to YYYY/MM/<project_name>
-        export_dir = candidate_num
+        # 2. Determine target year/month from project creation date
+        created_str, _ = _created_date(proj_path, meta)
+        target_year = None
+        target_month_num = None
+        target_month_name = None
+
+        if created_str and created_str != "Unknown":
+            try:
+                parts = created_str.split("-")
+                if len(parts) >= 2:
+                    y = int(parts[0])
+                    m = int(parts[1])
+                    d_obj = datetime.date(y, m, 1)
+                    target_year = d_obj.strftime("%Y")
+                    target_month_num = d_obj.strftime("%m")
+                    target_month_name = d_obj.strftime("%B")
+            except Exception:
+                pass
+
+        if not target_year:
+            now = datetime.datetime.now()
+            target_year = now.strftime("%Y")
+            target_month_num = now.strftime("%m")
+            target_month_name = now.strftime("%B")
+
+        month_full = f"{target_month_num} - {target_month_name}"
+
+        candidate_named = base_exports / target_year / month_full / project_slug
+        candidate_num = base_exports / target_year / target_month_num / project_slug
+
+        if (base_exports / target_year / month_full).exists():
+            export_dir = candidate_named
+        elif (base_exports / target_year / target_month_num).exists():
+            export_dir = candidate_num
+        else:
+            export_dir = candidate_named
 
     export_dir = _check_path_allowed(export_dir)
 
@@ -1298,6 +1363,71 @@ def transfer_fs(req: TransferRequest) -> dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Transfer failed: {e}",
+        ) from e
+
+
+@app.post("/api/fs/delete")
+def delete_filesystem_item(req: DeletePathRequest) -> dict[str, Any]:
+    """Delete a file or folder safely (default sends to Windows Recycle Bin)."""
+    target = _check_path_allowed(req.path)
+    if not target.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Target path does not exist: {target}",
+        )
+
+    resolved = target.resolve()
+    # Prevent deleting any root storage directories or primary drives
+    for root in _get_allowed_roots():
+        try:
+            if resolved == root.resolve():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot delete root system/storage directory",
+                )
+        except Exception:
+            pass
+
+    is_dir = target.is_dir()
+    name = target.name
+    path_str = str(resolved)
+
+    try:
+        if not req.permanent and req.recycle_bin and sys.platform == "win32":
+            method = "DeleteDirectory" if is_dir else "DeleteFile"
+            escaped_path = path_str.replace("'", "''")
+            cmd = f"Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::{method}('{escaped_path}', 'OnlyErrorDialogs', 'SendToRecycleBin')"
+            res = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True)
+            if res.returncode != 0:
+                logger.warning(f"Recycle bin failed with exit code {res.returncode}: {res.stderr}. Falling back to permanent delete.")
+                if is_dir:
+                    robust_rmtree(path_str)
+                else:
+                    os.remove(path_str)
+        else:
+            if is_dir:
+                robust_rmtree(path_str)
+            else:
+                os.remove(path_str)
+
+        # If it was a project in storage index, remove it
+        try:
+            remove_project_from_storage_index(path_str)
+        except Exception:
+            pass
+
+        return {
+            "status": "success",
+            "message": f"Successfully deleted '{name}'",
+            "path": path_str,
+            "is_dir": is_dir,
+            "recycled": not req.permanent and req.recycle_bin and sys.platform == "win32",
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete '{name}' at {path_str}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete '{name}': {e}",
         ) from e
 
 
@@ -1807,6 +1937,81 @@ def update_config_paths(req: UpdatePathsRequest) -> dict[str, Any]:
         "message": "System paths updated successfully",
         "config": config,
         "migrated": migrated,
+    }
+
+
+@app.get("/api/config/drives")
+def get_drives_endpoint() -> dict[str, Any]:
+    """Get all connected Windows drives and configured external mounts."""
+    drives = []
+    # Discover available drive letters on Windows
+    for letter in string.ascii_uppercase:
+        drive_path = f"{letter}:\\"
+        try:
+            p = Path(drive_path)
+            if p.exists():
+                drives.append({
+                    "name": f"Drive ({letter}:)",
+                    "path": drive_path,
+                    "is_system": (letter == "C"),
+                    "exists": True,
+                })
+        except Exception:
+            pass
+
+    config = _load_config()
+    configured_mounts = config.get("external_mounts", [])
+    return {
+        "drives": drives,
+        "external_mounts": configured_mounts,
+    }
+
+
+@app.put("/api/config/mounts")
+def update_config_mounts(req: UpdateMountsRequest) -> dict[str, Any]:
+    """Update configured external storage mounts."""
+    config = _load_config()
+    valid_mounts = []
+    for m in req.mounts:
+        if isinstance(m, dict) and "path" in m and m["path"].strip():
+            p_str = m["path"].strip()
+            name_str = m.get("name", "").strip() or Path(p_str).name or p_str
+            valid_mounts.append({
+                "name": name_str,
+                "path": str(Path(p_str)),
+            })
+
+    config["external_mounts"] = valid_mounts
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4)
+
+    reload_config()
+    _invalidate_server_cache()
+    return {
+        "status": "success",
+        "message": "External mounts updated successfully",
+        "external_mounts": valid_mounts,
+    }
+
+
+@app.put("/api/categories")
+def update_categories_endpoint(req: UpdateCategoriesRequest) -> dict[str, Any]:
+    """Update categories configuration."""
+    from .category_config import load_categories, save_categories
+    cats_config = load_categories()
+    cats_config["categories"] = req.categories
+    if req.default_category:
+        cats_config["default_category"] = req.default_category
+
+    ok = save_categories(cats_config)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to save categories configuration")
+
+    _invalidate_server_cache()
+    return {
+        "status": "success",
+        "message": "Categories updated successfully",
+        "categories": req.categories,
     }
 
 

@@ -187,10 +187,19 @@ export const api = {
   }),
   getRawFileUrl: (path) => `/api/fs/raw?path=${encodeURIComponent(path)}`,
   getFileContent: (path, maxBytes = 500000) => request(`/fs/content?path=${encodeURIComponent(path)}&max_bytes=${maxBytes}`),
-  transfer: (payload) => request("/fs/transfer", {
+  transferFiles: (payload) => request("/fs/transfer", {
     method: "POST",
     body: JSON.stringify(payload),
   }),
+  deletePath: async (path, permanent = false) => {
+    const res = await request("/fs/delete", {
+      method: "POST",
+      body: JSON.stringify({ path, permanent, recycle_bin: !permanent }),
+    });
+    cacheStore.invalidate("projects");
+    cacheStore.invalidate("storage");
+    return res;
+  },
   cleanDownloads: (folder = null) => request("/system/clean-downloads", {
     method: "POST",
     body: JSON.stringify({ folder }),
@@ -284,6 +293,30 @@ export const api = {
       }),
     });
     cacheStore.invalidate("config");
+    return res;
+  },
+
+  // Drives & External Storage Mounts
+  getDrives: () => request("/config/drives"),
+  updateMounts: async (mounts) => {
+    const res = await request("/config/mounts", {
+      method: "PUT",
+      body: JSON.stringify({ mounts }),
+    });
+    cacheStore.invalidate("config");
+    return res;
+  },
+
+  // Category Configuration
+  updateCategories: async (categories, defaultCategory = null) => {
+    const res = await request("/categories", {
+      method: "PUT",
+      body: JSON.stringify({
+        categories,
+        default_category: defaultCategory,
+      }),
+    });
+    cacheStore.invalidate("categories");
     return res;
   },
 

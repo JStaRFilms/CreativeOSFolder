@@ -115,22 +115,24 @@ export async function openNewProjectModal(onCreated = () => {}) {
           <div class="win11-form-row">
             <div class="win11-form-group flex-1">
               <label class="win11-label" for="m-proj-name">Project Title <span class="req">*</span></label>
-              <input type="text" id="m-proj-name" class="win11-input" placeholder="e.g. Summer Commercial, Brand Redesign" required autofocus />
+              <input type="text" id="m-proj-name" class="win11-input" placeholder="e.g. Summer Promo, Brand Redesign" required autofocus />
+              <span class="win11-form-hint" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">Special characters are automatically sanitized.</span>
             </div>
           </div>
 
           <div class="win11-form-row two-col">
             <div class="win11-form-group">
-              <label class="win11-label" for="m-proj-category">Category</label>
+              <label class="win11-label" for="m-proj-category">Category Blueprint</label>
               <select id="m-proj-category" class="win11-select">
-                ${Object.keys(categoriesData).map(k => `
-                  <option value="${k}" ${k === defaultCategory ? 'selected' : ''}>${k}</option>
+                ${Object.entries(categoriesData).map(([k, cfg]) => `
+                  <option value="${k}" ${k === defaultCategory ? 'selected' : ''}>${k} — ${cfg.description || ''}</option>
                 `).join("")}
               </select>
             </div>
             <div class="win11-form-group">
               <label class="win11-label" for="m-proj-client">Client (Optional)</label>
               <input type="text" id="m-proj-client" class="win11-input" placeholder="e.g. Nike, Internal" />
+              <span class="win11-form-hint" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">Places inside <code>Clients/[Client]/</code></span>
             </div>
           </div>
 
@@ -140,7 +142,7 @@ export async function openNewProjectModal(onCreated = () => {}) {
               <input type="date" id="m-proj-date" class="win11-input font-mono" />
             </div>
             <div class="win11-form-group">
-              <label class="win11-label" for="m-proj-subfolder">Custom Subfolder</label>
+              <label class="win11-label" for="m-proj-subfolder">Custom Subfolder Location</label>
               <input type="text" id="m-proj-subfolder" class="win11-input font-mono" placeholder="e.g. 2026/Campaigns" />
             </div>
           </div>
@@ -157,12 +159,14 @@ export async function openNewProjectModal(onCreated = () => {}) {
             </label>
           </div>
 
-          <!-- Preview -->
-          <div class="win11-scaffold-preview">
-            <div class="win11-preview-header">
-              <span class="font-mono" style="font-size: 0.725rem; color: var(--text-muted);">TARGET PATH</span>
-              <span class="font-mono" id="m-preview-path" style="font-size: 0.75rem; color: var(--color-primary); font-weight: 600;">01_Projects/Video/...</span>
+          <!-- Live Interactive Scaffold Tree Preview -->
+          <div class="win11-scaffold-preview" style="margin-top: 0.5rem;">
+            <div class="win11-preview-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span class="font-mono" style="font-size: 0.7rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.05em;">SCAFFOLD DIRECTORY PREVIEW</span>
+              <span class="win11-tree-tag" id="m-preview-cat-badge">Video</span>
             </div>
+            <div class="font-mono" id="m-preview-path" style="font-size: 0.725rem; color: var(--color-primary); font-weight: 600; margin-bottom: 4px; word-break: break-all;">01_Projects/Video/...</div>
+            <div class="win11-scaffold-tree-box" id="m-scaffold-tree-output"></div>
           </div>
 
           <div class="win11-modal-actions">
@@ -181,23 +185,84 @@ export async function openNewProjectModal(onCreated = () => {}) {
       const clientInp = document.getElementById("m-proj-client");
       const dateInp = document.getElementById("m-proj-date");
       const subInp = document.getElementById("m-proj-subfolder");
-      const previewEl = document.getElementById("m-preview-path");
+      const gitCb = document.getElementById("m-proj-git");
+      const simpleCb = document.getElementById("m-proj-simple");
+      const previewPathEl = document.getElementById("m-preview-path");
+      const previewCatBadge = document.getElementById("m-preview-cat-badge");
+      const treeOutput = document.getElementById("m-scaffold-tree-output");
 
       function updatePreview() {
-        const title = (nameInp?.value || "").trim() || "New_Project";
-        const cleanTitle = title.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_");
-        const now = new Date();
-        const datePrefix = dateInp?.value || now.toISOString().substring(0, 10);
-        const slug = `${datePrefix}_${cleanTitle}`;
-        const cat = catSel?.value || "Video";
+        const rawName = (nameInp?.value || "").trim() || "My_New_Project";
+        const cleanName = rawName.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_");
+        
+        let datePrefix;
+        if (dateInp?.value) {
+          datePrefix = dateInp.value;
+        } else {
+          const now = new Date();
+          datePrefix = now.toISOString().substring(0, 10);
+        }
+
+        const slug = `${datePrefix}_${cleanName}`;
+        const selectedCat = catSel?.value || defaultCategory;
+        const catConfig = categoriesData[selectedCat] || {};
         const client = (clientInp?.value || "").trim();
         const sub = (subInp?.value || "").trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+        const isSimple = simpleCb?.checked || false;
 
-        let rel = client ? `Clients/${client}` : cat;
-        if (sub) rel += `/${sub}`;
-        rel += `/${slug}`;
+        let baseRel = client ? `Clients/${client.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_")}` : (catConfig.physical_folder || selectedCat);
+        if (sub) baseRel += `/${sub}`;
+        const fullTarget = `01_Projects/${baseRel}/${slug}`;
 
-        if (previewEl) previewEl.textContent = `01_Projects/${rel}`;
+        if (previewPathEl) previewPathEl.textContent = fullTarget;
+        if (previewCatBadge) previewCatBadge.textContent = isSimple ? `${selectedCat} (Minimal)` : selectedCat;
+
+        // Build structure tree
+        let struct = {};
+        if (isSimple) {
+          struct = simpleStructure;
+        } else if (catConfig.template_structure && Object.keys(catConfig.template_structure).length > 0) {
+          struct = catConfig.template_structure;
+        } else {
+          const list = catConfig.folder_structure || ["00_Notes", "01_Footage", "02_Audio", "03_Exports"];
+          list.forEach(f => { struct[f] = []; });
+        }
+
+        if (treeOutput) {
+          const folders = Object.keys(struct);
+          let treeHtml = `
+            <div class="win11-tree-root">
+              <span>${icons.folder}</span>
+              <span><strong>${escapeHtml(slug)}</strong></span>
+            </div>
+          `;
+
+          folders.forEach((folder) => {
+            const files = struct[folder] || [];
+            const isNotes = folder === "00_Notes";
+            treeHtml += `
+              <div class="win11-tree-node">
+                <span style="color: var(--text-muted);">├─</span>
+                <span style="color: var(--color-primary);">${icons.folder}</span>
+                <span style="font-weight: 600;">${escapeHtml(folder)}/</span>
+                ${isNotes ? '<span class="win11-tree-tag">Obsidian Brain</span>' : ''}
+              </div>
+            `;
+            if (Array.isArray(files) && files.length > 0) {
+              files.forEach((file) => {
+                treeHtml += `
+                  <div class="win11-tree-file">
+                    <span style="color: var(--text-muted);">│  ├─</span>
+                    <span>${icons.file}</span>
+                    <span>${escapeHtml(file)}</span>
+                  </div>
+                `;
+              });
+            }
+          });
+
+          treeOutput.innerHTML = treeHtml;
+        }
       }
 
       nameInp?.addEventListener("input", updatePreview);
@@ -205,6 +270,8 @@ export async function openNewProjectModal(onCreated = () => {}) {
       clientInp?.addEventListener("input", updatePreview);
       dateInp?.addEventListener("change", updatePreview);
       subInp?.addEventListener("input", updatePreview);
+      gitCb?.addEventListener("change", updatePreview);
+      simpleCb?.addEventListener("change", updatePreview);
       updatePreview();
 
       document.getElementById("m-cancel-btn")?.addEventListener("click", closeModal);
@@ -224,8 +291,8 @@ export async function openNewProjectModal(onCreated = () => {}) {
             client: clientInp.value.trim() || null,
             destination_subpath: subInp.value.trim() || null,
             date: dateInp.value || null,
-            git: Boolean(document.getElementById("m-proj-git")?.checked),
-            simple: Boolean(document.getElementById("m-proj-simple")?.checked),
+            git: Boolean(gitCb?.checked),
+            simple: Boolean(simpleCb?.checked),
           };
 
           const res = await api.createProject(payload);

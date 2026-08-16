@@ -113,7 +113,8 @@ export function initRouter(containerId = "app-main") {
 
     const header = document.querySelector(".app-header");
     if (header) {
-      header.style.display = uiMode === "win11" ? "none" : "";
+      const isWin11Explorer = uiMode === "win11" && (routeKey === "#explorer" || routeKey === "#dashboard");
+      header.style.display = isWin11Explorer ? "none" : "";
     }
 
     // Render corresponding view based on active Experience Mode
