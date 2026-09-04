@@ -178,7 +178,7 @@ def main() -> None:
     
     # First-run detection - check if setup or config command is being run
     # Skip onboarding if user is trying to run setup or config commands
-    is_setup_cmd = len(sys.argv) > 1 and sys.argv[1] in ("setup", "config", "category")
+    is_setup_cmd = len(sys.argv) > 1 and sys.argv[1].lower() in ("setup", "config", "category")
     
     if is_first_run() and not is_setup_cmd:
         console.print("[cyan]First run detected! Let's set up CreativeOS...[/cyan]\n")
@@ -192,17 +192,17 @@ def main() -> None:
 
     # Support both conventional help forms: `cos help storage` and
     # `cos storage help`. Convert them to argparse's normal `--help` route.
-    if len(sys.argv) == 2 and sys.argv[1] == "help":
+    if len(sys.argv) == 2 and sys.argv[1].lower() == "help":
         show_help_overview()
         sys.exit(0)
-    if len(sys.argv) > 2 and sys.argv[1] == "help":
+    if len(sys.argv) > 2 and sys.argv[1].lower() == "help":
         sys.argv = [sys.argv[0], *sys.argv[2:], "--help"]
-    elif len(sys.argv) > 2 and sys.argv[-1] == "help":
+    elif len(sys.argv) > 2 and sys.argv[-1].lower() == "help":
         sys.argv = [*sys.argv[:-1], "--help"]
 
     # Intercept `cos` (no args) or `cos -h` / `cos --help` BEFORE argparse
     # so we can show the full Rich overview instead of the terse argparse output.
-    if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ("-h", "--help")):
+    if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1].lower() in ("-h", "--help", "-help", "/help", "/?")):
         show_help_overview()
         sys.exit(0)
 
@@ -248,7 +248,11 @@ def main() -> None:
     config_cmd.add_parser(subparsers)
 
     args = parser.parse_args()
-    args.category_flag_passed = "-c" in sys.argv or "--category" in sys.argv
+    args.category_flag_passed = any(
+        arg.lower() in ("-c", "--category", "-category", "--type", "-type")
+        or arg.lower().startswith(("--category=", "-category=", "--type=", "-type="))
+        for arg in sys.argv
+    )
 
     # Route commands to their handlers
     if args.command == "new":             new.cmd_new(args)
