@@ -4198,5 +4198,60 @@ body[data-ui-mode="win11"] .app-container {
   justify-content: center;
 }
 
+@media (max-width: 1100px) {
+  .win11-workspace-layout,
+  .win11-workspace-layout.with-inspector,
+  .win11-workspace-layout.with-inspector.inspector-is-wide {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
 
+  .win11-zone3-inspector {
+    display: none !important;
+  }
+
+  .win11-nav-row {
+    flex-wrap: wrap;
+  }
+
+  .win11-address-bar {
+    min-width: 240px;
+  }
+
+  .win11-search-box {
+    width: 200px;
+  }
+}
+
+@media (max-width: 760px) {
+  .win11-workspace-layout,
+  .win11-workspace-layout.with-inspector,
+  .win11-workspace-layout.with-inspector.inspector-is-wide {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .win11-zone1-sidebar {
+    display: none;
+  }
+
+  .win11-nav-row {
+    align-items: stretch;
+  }
+
+  .win11-address-bar,
+  .win11-search-box {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .win11-dual-panes-split {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .win11-dual-pane.source-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
 

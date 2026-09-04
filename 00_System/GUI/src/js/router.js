@@ -7,7 +7,7 @@
 
 import { renderDashboard } from "./views/dashboardView.js";
 import { renderExplorer } from "./views/explorerView.js";
-import { renderDesktopExplorer } from "./views/desktopExplorerView.js";
+import { disposeDesktopExplorer, renderDesktopExplorer } from "./views/desktopExplorerView.js";
 import { renderStorage } from "./views/storageView.js";
 import { renderNewProject } from "./views/newProjectView.js";
 import { renderSettings } from "./views/settingsView.js";
@@ -122,6 +122,7 @@ export function initRouter(containerId = "app-main") {
       container.classList.add("is-win11-engine");
       renderDesktopExplorer(container, initialPath);
     } else {
+      disposeDesktopExplorer();
       container.classList.remove("is-win11-engine");
       const renderFn = routes[routeKey] || renderDashboard;
       if (routeKey === "#explorer") {

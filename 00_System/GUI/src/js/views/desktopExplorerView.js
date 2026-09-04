@@ -1,6 +1,6 @@
 /**
  * Windows 11 Native 3-Zone Desktop Explorer View Component
- * 
+ *
  * Features:
  * - Windows 11 Chrome: Tabs bar with sessionStorage isolation, Navigation row (Back/Forward/Up/Refresh/Interactive Breadcrumbs/Omni-Search), Fluent Command Ribbon.
  * - Zone 1 (Tree Sidebar): Quick Access, Project Categories with live counts, Mounted Windows Drives, Studio Tools (Storage & Settings).
@@ -39,6 +39,14 @@ function formatGridItemName(name, isDir = false) {
   // Strip date prefixes like YYYY-MM-DD_ from folder names only
   const stripped = name.replace(/^\d{4}-\d{2}-\d{2}[-_]/i, "");
   return stripped || name;
+}
+
+let activeExplorerController = null;
+
+export function disposeDesktopExplorer() {
+  activeExplorerController?.abort();
+  activeExplorerController = null;
+  document.getElementById("win11-fullscreen-overlay")?.remove();
 }
 
 function renderMarkdownSafe(rawText) {
@@ -84,6 +92,11 @@ function renderMarkdownSafe(rawText) {
 }
 
 export async function renderDesktopExplorer(container, initialPath = "") {
+  disposeDesktopExplorer();
+  const explorerController = new AbortController();
+  const { signal } = explorerController;
+  activeExplorerController = explorerController;
+
   // Parse initial path from URL query or argument
   let startPath = initialPath;
   if (!startPath) {
@@ -132,10 +145,12 @@ export async function renderDesktopExplorer(container, initialPath = "") {
   let storageData = null;
   let configData = null;
   let categoriesData = {};
+  let directoryLoadId = 0;
 
   // Dual Pane Ingest State (View 3)
   let dualLeftPath = localStorage.getItem("cos_dual_left_path") || "Downloads";
-  let dualRightPath = localStorage.getItem("cos_dual_right_path") || "01_Projects";
+  let dualRightPath = localStorage.getItem("cos_dual_right_path") || "";
+  if (dualRightPath === "01_Projects") dualRightPath = "";
   let dualLeftEntries = [];
   let dualRightEntries = [];
   let dualLeftSelected = [];
@@ -185,9 +200,19 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     storageData = storage || null;
     configData = conf || null;
     categoriesData = cats?.categories || {};
+    const projectsRoot = configData?.paths?.projects_path?.path || configData?.config?.projects_path || "";
+    if (projectsRoot && !/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(dualRightPath)) {
+      const relativeTarget = dualRightPath.replace(/^01_Projects[\\/]?/, "");
+      const separator = projectsRoot.includes("\\") ? "\\" : "/";
+      dualRightPath = relativeTarget
+        ? `${projectsRoot.replace(/[\\/]$/, "")}${separator}${relativeTarget}`
+        : projectsRoot;
+      localStorage.setItem("cos_dual_right_path", dualRightPath);
+    }
   } catch (e) {
     console.warn("[Explorer SWR]", e);
   }
+  if (signal.aborted) return;
 
   function getActiveTab() {
     return tabs.find(t => t.id === activeTabId) || tabs[0];
@@ -490,7 +515,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
           else if (tab.path === "Downloads") tabIcon = `<span style="color: #3b82f6;">${icons.download}</span>`;
 
           return `
-            <div class="win11-tab-item ${isActive ? 'active' : ''}" data-tab-id="${tab.id}">
+            <div class="win11-tab-item ${isActive ? 'active' : ''}" data-tab-id="${tab.id}" role="tab" tabindex="0" aria-selected="${isActive}">
               <span class="win11-tab-icon">${tabIcon}</span>
               <span class="win11-tab-title font-mono" title="${tab.title}">${escapeHtml(tab.title)}</span>
               ${tabs.length > 1 ? `
@@ -508,6 +533,12 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     `;
 
     tabsBarEl.querySelectorAll(".win11-tab-item").forEach(item => {
+      item.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          item.click();
+        }
+      });
       item.addEventListener("click", (e) => {
         if (e.target.closest(".win11-tab-close-btn")) return;
         const id = Number(item.getAttribute("data-tab-id"));
@@ -624,7 +655,9 @@ export async function renderDesktopExplorer(container, initialPath = "") {
             dropEl.remove();
             document.removeEventListener("click", closeHandler);
           };
-          setTimeout(() => document.addEventListener("click", closeHandler), 10);
+          setTimeout(() => {
+            if (!signal.aborted) document.addEventListener("click", closeHandler, { signal });
+          }, 10);
         } catch {}
       });
     });
@@ -769,7 +802,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
         if (breadcrumbsListEl) breadcrumbsListEl.style.display = "flex";
       }
     }
-  });
+  }, { signal });
 
   function updateRibbonProjectExportButton() {
     const exportBtn = document.getElementById("win11-btn-export-folder");
@@ -810,7 +843,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     const catsTree = document.getElementById("win11-categories-tree");
     if (!catsTree) return;
 
-    const cats = (categoriesData && categoriesData.categories) ? Object.entries(categoriesData.categories) : [
+    const cats = Object.keys(categoriesData).length ? Object.entries(categoriesData) : [
       ["Video", { name: "Video", icon: "video", physical_folder: "Video" }],
       ["Code", { name: "Code", icon: "code", physical_folder: "Code" }],
       ["Audio", { name: "Audio", icon: "audio", physical_folder: "Audio" }],
@@ -885,7 +918,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     const catCounts = { Clients: 0 };
     const clientSet = new Set();
 
-    const cats = (categoriesData && categoriesData.categories) ? Object.keys(categoriesData.categories) : ["Video", "Code", "Audio", "AI", "Design", "Photo"];
+    const cats = Object.keys(categoriesData).length ? Object.keys(categoriesData) : ["Video", "Code", "Audio", "AI", "Design", "Photo"];
     cats.forEach(c => { catCounts[c] = 0; });
 
     projectsList.forEach(p => {
@@ -1055,8 +1088,15 @@ export async function renderDesktopExplorer(container, initialPath = "") {
   // Main Directory Loader
   // ──────────────────────────────────────────────────────────────────────────
   async function loadCurrentDirectory() {
+    const loadId = ++directoryLoadId;
     const tab = getActiveTab();
-    const targetPath = tab.path;
+    if (!tab) return;
+    const tabId = tab.id;
+    const targetPath = tab.path || "";
+    const isStaleLoad = () => {
+      const activeTab = getActiveTab();
+      return signal.aborted || loadId !== directoryLoadId || !activeTab || activeTab.id !== tabId || activeTab.path !== targetPath;
+    };
 
     // Handle in-app Studio Tools views directly inside Windows 11 Explorer canvas
     if (targetPath === "storage" || targetPath === "sys://storage") {
@@ -1129,6 +1169,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
 
     try {
       const res = await api.listFiles(targetPath);
+      if (isStaleLoad()) return;
       currentEntries = res.entries || [];
       currentParentPath = res.parent_path || null;
 
@@ -1165,6 +1206,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
         }, 50);
       }
     } catch (err) {
+      if (isStaleLoad()) return;
       if (canvasEl) {
         canvasEl.innerHTML = `
           <div class="win11-empty-canvas">
@@ -1293,7 +1335,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
                 const typeStr = isDir ? "File folder" : (entry.type ? `${entry.type.toUpperCase()} file` : "File");
 
                 return `
-                  <tr class="win11-table-row ${isDir ? 'is-folder' : 'is-file'} ${isSel ? 'is-selected' : ''}" data-path="${entry.path}" data-isdir="${isDir}">
+                  <tr class="win11-table-row ${isDir ? 'is-folder' : 'is-file'} ${isSel ? 'is-selected' : ''}" data-path="${entry.path}" data-isdir="${isDir}" tabindex="0" role="button">
                     <td class="col-name">
                       <div class="win11-name-cell">
                         <span class="win11-cell-icon">${iconSvg}</span>
@@ -1351,7 +1393,10 @@ export async function renderDesktopExplorer(container, initialPath = "") {
       });
 
       el.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
+        if (e.key === " ") {
+          e.preventDefault();
+          if (entry) selectCanvasItem(entry);
+        } else if (e.key === "Enter") {
           e.preventDefault();
           if (isDir) updateActiveTabPath(p);
           else api.openPath(p).catch(err => showToast(`Cannot open: ${err.message}`, "error"));
@@ -1551,7 +1596,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
   document.addEventListener("click", () => {
     const menuEl = document.getElementById("win11-context-menu");
     if (menuEl) menuEl.style.display = "none";
-  });
+  }, { signal });
 
   // ──────────────────────────────────────────────────────────────────────────
   // View 3: Dual-Pane External RAID Bridge (Side-by-side Ingest)
@@ -1575,14 +1620,20 @@ export async function renderDesktopExplorer(container, initialPath = "") {
       ])
     ];
 
+    const projectsRoot = configData?.paths?.projects_path?.path || configData?.config?.projects_path || "";
+    const projectDestination = (folder = "") => {
+      if (!folder) return projectsRoot;
+      const separator = projectsRoot.includes("\\") ? "\\" : "/";
+      return projectsRoot ? `${projectsRoot.replace(/[\\/]$/, "")}${separator}${folder}` : folder;
+    };
     const targetPresets = [
-      { name: "Projects Root", path: "" },
-      ...(categoriesData?.categories ? Object.entries(categoriesData.categories).map(([k, c]) => ({
+      { name: "Projects Root", path: projectDestination() },
+      ...(Object.keys(categoriesData).length ? Object.entries(categoriesData).map(([k, c]) => ({
         name: c.display_name || k,
-        path: `01_Projects/${c.physical_folder || k}`
+        path: projectDestination(c.physical_folder || k)
       })) : [
-        { name: "Video", path: "01_Projects/Video" },
-        { name: "Code", path: "01_Projects/Code" }
+        { name: "Video", path: projectDestination("Video") },
+        { name: "Code", path: projectDestination("Code") }
       ]),
       { name: "02_Exports", path: "02_Exports" }
     ];
@@ -1925,7 +1976,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
       let transferredCount = 0;
       for (const src of dualLeftSelected) {
         try {
-          await api.transfer({
+          await api.transferFiles({
             source: src,
             destination: dualRightPath || "",
             move: dualMoveMode,
@@ -2103,7 +2154,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) closeOverlay();
     });
-    document.addEventListener("keydown", keyHandler);
+    document.addEventListener("keydown", keyHandler, { signal });
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -2588,25 +2639,33 @@ export async function renderDesktopExplorer(container, initialPath = "") {
 
     const action = item.getAttribute("data-action");
     if (action === "clean-downloads") {
-      try {
-        showToast("Cleaning loose downloads into subfolders...", "info", 1500);
-        const res = await api.cleanDownloads();
-        showToast(`Cleaned Downloads: ${res.moved_count} files organized!`, "success");
-        updateActiveTabPath("Downloads");
-      } catch (err) {
-        showToast(`Failed: ${err.message}`, "error");
-      }
+      openConfirmModal({
+        title: "Organize Downloads",
+        message: "Move loose files in Downloads into automatically selected subfolders?",
+        subtext: "Existing folders are left in place. Name collisions may be renamed.",
+        confirmText: "Organize Files",
+        variant: "warning",
+        onConfirm: async () => {
+          const res = await api.cleanDownloads();
+          showToast(`Cleaned Downloads: ${res.moved_count} files organized!`, "success");
+          updateActiveTabPath("Downloads");
+        },
+      });
       return;
     }
     if (action === "sort-inbox") {
-      try {
-        showToast("Sorting unfiled renders into monthly folders...", "info", 1500);
-        const res = await api.sortExportsInbox();
-        showToast(`Sorted ${res.moved_count} renders into 02_Exports/!`, "success");
-        updateActiveTabPath("02_Exports");
-      } catch (err) {
-        showToast(`Failed: ${err.message}`, "error");
-      }
+      openConfirmModal({
+        title: "Sort Export Inbox",
+        message: "Move unfiled renders into date-based folders under 02_Exports?",
+        subtext: "Existing folders are left in place. Name collisions may be renamed.",
+        confirmText: "Sort Renders",
+        variant: "warning",
+        onConfirm: async () => {
+          const res = await api.sortExportsInbox();
+          showToast(`Sorted ${res.moved_count} renders into 02_Exports/!`, "success");
+          updateActiveTabPath("02_Exports");
+        },
+      });
       return;
     }
     if (action === "bulk-reclaim") {
@@ -2694,7 +2753,7 @@ export async function renderDesktopExplorer(container, initialPath = "") {
         }
       });
     }
-  });
+  }, { signal });
 
   // Current Folder Live Filter
   searchInputEl?.addEventListener("input", () => {
@@ -2709,6 +2768,17 @@ export async function renderDesktopExplorer(container, initialPath = "") {
   renderTabsBar();
   renderSidebarCategories();
   renderSidebarDrives();
+  container.querySelectorAll(".win11-tree-item").forEach(item => {
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+  });
+  document.getElementById("win11-sidebar")?.addEventListener("keydown", (e) => {
+    const item = e.target.closest(".win11-tree-item");
+    if (item && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      item.click();
+    }
+  });
   updateSidebarBadges();
   loadCurrentDirectory();
 }

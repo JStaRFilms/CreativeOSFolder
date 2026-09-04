@@ -10,6 +10,14 @@ import { showToast } from "./toast.js";
 
 let activeModalCloser = null;
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export function closeNewProjectModal() {
   if (activeModalCloser) {
     activeModalCloser();
@@ -20,6 +28,8 @@ export async function openNewProjectModal(onCreated = () => {}) {
   const modalContainer = document.getElementById("modal-container");
   if (!modalContainer) return;
 
+  closeNewProjectModal();
+  const previouslyFocused = document.activeElement;
   let activeTab = "scaffold"; // "scaffold" | "clone" | "adopt"
   let categoriesData = {};
   let defaultCategory = "Video";
@@ -81,13 +91,43 @@ export async function openNewProjectModal(onCreated = () => {}) {
   document.body.style.overflow = "hidden";
 
   function closeModal() {
+    modalContainer.removeEventListener("keydown", handleModalKeydown);
     modalContainer.style.display = "none";
     document.body.style.overflow = "";
     modalContainer.innerHTML = "";
     activeModalCloser = null;
+    if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
+      previouslyFocused.focus();
+    }
+  }
+
+  function handleModalKeydown(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeModal();
+      return;
+    }
+    if (e.key !== "Tab") return;
+
+    const focusable = [...modalContainer.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter(el => !el.hidden && el.offsetParent !== null);
+    if (!focusable.length) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   activeModalCloser = closeModal;
+  modalContainer.addEventListener("keydown", handleModalKeydown);
 
   document.getElementById("new-proj-close-btn")?.addEventListener("click", closeModal);
   document.getElementById("new-project-modal-backdrop")?.addEventListener("click", (e) => {
@@ -102,6 +142,7 @@ export async function openNewProjectModal(onCreated = () => {}) {
       btn.classList.add("active");
       activeTab = btn.getAttribute("data-tab");
       renderTabBody();
+      queueMicrotask(() => document.getElementById("modal-tab-content")?.querySelector("[autofocus], input, select, button")?.focus());
     });
   });
 
@@ -125,7 +166,7 @@ export async function openNewProjectModal(onCreated = () => {}) {
               <label class="win11-label" for="m-proj-category">Category Blueprint</label>
               <select id="m-proj-category" class="win11-select">
                 ${Object.entries(categoriesData).map(([k, cfg]) => `
-                  <option value="${k}" ${k === defaultCategory ? 'selected' : ''}>${k} — ${cfg.description || ''}</option>
+                  <option value="${escapeHtml(k)}" ${k === defaultCategory ? 'selected' : ''}>${escapeHtml(k)} — ${escapeHtml(cfg.description || '')}</option>
                 `).join("")}
               </select>
             </div>
@@ -194,7 +235,7 @@ export async function openNewProjectModal(onCreated = () => {}) {
       function updatePreview() {
         const rawName = (nameInp?.value || "").trim() || "My_New_Project";
         const cleanName = rawName.replace(/[^a-zA-Z0-9_\-\s]/g, "").replace(/\s+/g, "_");
-        
+
         let datePrefix;
         if (dateInp?.value) {
           datePrefix = dateInp.value;
@@ -325,7 +366,7 @@ export async function openNewProjectModal(onCreated = () => {}) {
               <select id="m-clone-category" class="win11-select">
                 <option value="Code" selected>Code</option>
                 ${Object.keys(categoriesData).filter(k => k !== "Code").map(k => `
-                  <option value="${k}">${k}</option>
+                  <option value="${escapeHtml(k)}">${escapeHtml(k)}</option>
                 `).join("")}
               </select>
             </div>
@@ -413,7 +454,7 @@ export async function openNewProjectModal(onCreated = () => {}) {
               <label class="win11-label" for="m-adopt-category">Category</label>
               <select id="m-adopt-category" class="win11-select">
                 ${Object.keys(categoriesData).map(k => `
-                  <option value="${k}" ${k === defaultCategory ? 'selected' : ''}>${k}</option>
+                  <option value="${escapeHtml(k)}" ${k === defaultCategory ? 'selected' : ''}>${escapeHtml(k)}</option>
                 `).join("")}
               </select>
             </div>
@@ -481,4 +522,5 @@ export async function openNewProjectModal(onCreated = () => {}) {
   }
 
   renderTabBody();
+  queueMicrotask(() => modalContainer.querySelector("[autofocus], input, select, button")?.focus());
 }

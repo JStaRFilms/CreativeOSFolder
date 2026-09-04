@@ -1,13 +1,15 @@
-import os
-import datetime
 import argparse
+import datetime
+import os
 from pathlib import Path
 from typing import Any
 
-from ..console import console
 from ..config import EXPORTS_PATH
-from ..file_utils import get_export_month_path, find_meta_in_cwd, format_path
+from ..console import console
+from ..file_utils import find_meta_in_cwd, format_path, get_export_month_path
+from ..security import validate_path_component
 from ..storage import _created_date
+
 
 def add_parser(subparsers: Any) -> None:
     from ..help_formatter import RichHelpAction
@@ -48,18 +50,22 @@ def cmd_export(args: argparse.Namespace) -> None:
     meta, project_root = find_meta_in_cwd()
     
     if meta and not args.simple and project_root:
-        slug = meta.get("slug") or meta.get("name") or Path(project_root).name
-        base_exports = Path(EXPORTS_PATH)
+        slug = validate_path_component(
+            str(meta.get("slug") or meta.get("name") or Path(project_root).name)
+        )
+        base_exports = Path(EXPORTS_PATH).resolve()
 
         # 1. Look for existing export folder
         existing_export = None
         if base_exports.exists():
-            for candidate in base_exports.glob(f"*/*/{slug}"):
+            for month_dir in base_exports.glob("*/*"):
+                candidate = month_dir / slug
                 if candidate.is_dir():
                     existing_export = candidate
                     break
             if not existing_export:
-                for candidate in base_exports.glob(f"*/*/*/{slug}"):
+                for month_dir in base_exports.glob("*/*/*"):
+                    candidate = month_dir / slug
                     if candidate.is_dir():
                         existing_export = candidate
                         break
@@ -102,6 +108,10 @@ def cmd_export(args: argparse.Namespace) -> None:
                 export_dir = candidate_num
             else:
                 export_dir = candidate_named
+
+        export_dir = export_dir.resolve()
+        if not export_dir.is_relative_to(base_exports):
+            raise ValueError("Export destination must remain inside the exports directory")
 
         for s in ["Video", "Thumbnail", "Audio"]:
             (export_dir / s).mkdir(parents=True, exist_ok=True)
